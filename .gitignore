@@ -22,3 +22,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Expo CLI cache, if Expo is ever started from the repo root
+.expo/

@@ -1,0 +1,134 @@
+# Continuous integration (POA.md Phase 0 testing stage; metrics_and_testing.md §2).
+# Every push and pull request: typecheck, lint (including layer boundaries), all tests on a
+# real PostgreSQL, migrations, a production build, k6 smoke and rate-limit checks, and
+# security checks (dependency audit, secret scan).
+#
+# Third-party actions are pinned to full commit SHAs (supply-chain safety); the version is in
+# the comment. Update them deliberately, never automatically to a moving tag.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  K6_VERSION: '2.4.0'
+  GITLEAKS_VERSION: '8.30.1'
+
+jobs:
+  build-and-test:
+    name: Typecheck, lint, tests, migrations, load smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres # throwaway CI container, never a real secret
+          POSTGRES_DB: wildself_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/wildself_test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/wildself_test
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint (code style and layer boundaries)
+        run: npm run lint
+
+      - name: Migration check (no logic in the database)
+        run: npm run db:check
+
+      - name: Tests (mobile, backend, internal API, data layer on PostgreSQL, migration tooling)
+        run: npm test
+
+      - name: Apply migrations to a fresh database
+        run: npm run db:migrate
+
+      - name: Production build of the server
+        run: npm run build --workspace services/backend
+
+      - uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece # v1.3.0
+        with:
+          k6-version: ${{ env.K6_VERSION }}
+
+      - name: k6 smoke (API on the built server)
+        env:
+          NODE_ENV: test
+          AUTH_MODE: dev-stub
+          DATABASE_SSL: disable
+          RATE_LIMIT_PER_MINUTE: '10000'
+        run: |
+          node services/backend/dist/main.js --role=api &
+          SERVER=$!
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/health > /dev/null && break; sleep 1; done
+          k6 run -e BASE_URL=http://127.0.0.1:3000 -e DURATION=20s tests/load/smoke.js
+          kill $SERVER
+
+      - name: k6 rate-limit check (default limit of 120 per minute)
+        env:
+          NODE_ENV: test
+          AUTH_MODE: dev-stub
+          DATABASE_SSL: disable
+        run: |
+          node services/backend/dist/main.js --role=api &
+          SERVER=$!
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:3000/health > /dev/null && break; sleep 1; done
+          k6 run -e BASE_URL=http://127.0.0.1:3000 -e EXPECTED_LIMIT=120 tests/load/rate-limit.js
+          kill $SERVER
+
+  security:
+    name: Dependency audit and secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the whole history is scanned for secrets
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      - name: Fail on high or critical vulnerabilities in runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Report all advisories (development tools included; not failing)
+        run: npm audit || true
+
+      - name: Secret scan of the full git history (gitleaks, checksum verified)
+        run: |
+          set -euo pipefail
+          BASE=https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}
+          FILE=gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz
+          curl -sSfL -o "$FILE" "$BASE/$FILE"
+          curl -sSfL -o checksums.txt "$BASE/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " $FILE\$" checksums.txt | sha256sum -c -
+          tar -xzf "$FILE" gitleaks
+          ./gitleaks git --redact --verbose --exit-code 1 .

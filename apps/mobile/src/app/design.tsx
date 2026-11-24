@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '@/components/AppText';
@@ -7,7 +7,9 @@ import { BackHeader } from '@/components/BackHeader';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { KeyboardScrollView } from '@/components/KeyboardScrollView';
 import { Skeleton } from '@/components/Skeleton';
+import { TextField } from '@/components/TextField';
 import { ThemeSwitch } from '@/components/ThemeSwitch';
 import { useTheme } from '@/design/theme';
 import { gutter, radius, space, type ColorTokens } from '@/design/tokens';
@@ -21,7 +23,7 @@ export default function DesignPreviewScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={[styles.root, { backgroundColor: colors.paper }]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardScrollView contentContainerStyle={styles.content}>
         <BackHeader title="Design preview" />
 
         <Section title="Appearance">
@@ -91,7 +93,18 @@ export default function DesignPreviewScreen() {
             body="The next leaf, bird or bloom you notice can be your first."
           />
         </Section>
-      </ScrollView>
+
+        {/* Last on the page on purpose: the keyboard would cover these fields without §7.4. */}
+        <Section title="Text fields · keyboard check">
+          <TextField label="Habit name" placeholder="Morning walk" returnKeyType="next" />
+          <TextField label="Where" placeholder="The park by the river" returnKeyType="next" />
+          <TextField
+            label="Journal"
+            placeholder="What did you notice today? Keep typing past a few lines."
+            multiline
+          />
+        </Section>
+      </KeyboardScrollView>
     </SafeAreaView>
   );
 }

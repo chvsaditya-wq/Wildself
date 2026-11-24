@@ -182,6 +182,33 @@ describe('request safety', () => {
     expect(limited.json().error.code).toBe('RATE_LIMITED');
   });
 
+  it('rate-limits callers without a login by IP too, so tokens cannot be guessed without limit', async () => {
+    const api = await makeApp({ rateLimit: 3 });
+    const call = () => api.inject({ method: 'GET', url: '/v1/session', headers: { authorization: 'Bearer guess' } });
+    for (let i = 0; i < 3; i++) expect((await call()).statusCode).toBe(401);
+    const limited = await call();
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json().error.code).toBe('RATE_LIMITED');
+  });
+
+  it('rate-limits unknown routes without a login, so route probing is limited', async () => {
+    const api = await makeApp({ rateLimit: 2 });
+    const call = () => api.inject({ method: 'GET', url: '/v1/probe-' + Math.random() });
+    for (let i = 0; i < 2; i++) expect((await call()).statusCode).toBe(401);
+    expect((await call()).statusCode).toBe(429);
+  });
+
+  it('counts each signed-in user separately', async () => {
+    const api = await makeApp({ rateLimit: 2 });
+    const as = (id: string) =>
+      api.inject({ method: 'GET', url: '/v1/session', headers: { authorization: `Bearer dev:${id}` } });
+    const OTHER = '7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
+    await as(USER);
+    await as(USER);
+    expect((await as(USER)).statusCode).toBe(429);
+    expect((await as(OTHER)).statusCode).toBe(200);
+  });
+
   it('hides internal details of unexpected errors', async () => {
     const api = await makeApp();
     api.get('/v1/explode', async () => {

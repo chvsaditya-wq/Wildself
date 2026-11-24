@@ -1,6 +1,6 @@
 import { router, type Href } from 'expo-router';
 import type { DrawerContentComponentProps } from 'expo-router/drawer';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/design/theme';
@@ -9,6 +9,7 @@ import { haptics } from '@/motion/haptics';
 
 import { AppText } from './AppText';
 import { Icon, type IconName } from './Icon';
+import { KeyboardScrollView } from './KeyboardScrollView';
 import { PressableScale } from './PressableScale';
 import { ThemeSwitch } from './ThemeSwitch';
 
@@ -32,7 +33,7 @@ export function MenuContent({ navigation }: DrawerContentComponentProps) {
   };
 
   return (
-    <ScrollView
+    <KeyboardScrollView
       style={{ backgroundColor: colors.paper }}
       contentContainerStyle={[
         styles.content,
@@ -76,7 +77,7 @@ export function MenuContent({ navigation }: DrawerContentComponentProps) {
         <Icon name="settings" color={colors.lichen} />
         <AppText tone="muted">Settings</AppText>
       </PressableScale>
-    </ScrollView>
+    </KeyboardScrollView>
   );
 }
 

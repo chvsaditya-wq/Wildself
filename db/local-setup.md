@@ -35,6 +35,8 @@ TEST_DATABASE_URL=postgres://wildself_app:choose-a-password@localhost:5432/wilds
 
 If the password contains `@`, `:`, `/` or `#`, write it percent-encoded (for example `@` → `%40`).
 
+Each setting must appear **only once**. If a line appears twice, the last copy wins silently, so a leftover `CHANGE_ME` line or a second line with a different password causes "password authentication failed". Both URLs use the same `wildself_app` account, so they must carry the same password.
+
 ## 4. Check it works
 
 ```bash

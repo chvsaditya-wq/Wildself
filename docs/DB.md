@@ -4,14 +4,15 @@ _As of 2026-11-24 · Phase 0 database tooling built · No feature tables yet (th
 
 PostgreSQL holds the raw facts and the results the engines produce. It stores, retrieves, counts and sums, but never decides. Every read and write is a named function in the data layer, called only by the API. Engine work is read in batches of users and saved in one transaction per task. Detail is kept only while it is useful, then deleted.
 
-**Related docs:** [POA.md](POA.md) (plan and progress) · [ARCHITECTURE.md](ARCHITECTURE.md) (backend) · [FRONTEND.md](FRONTEND.md) (app) · [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) (changes and instructions)
+**Related docs:** [POA.md](POA.md) (plan and progress) · [ARCHITECTURE.md](ARCHITECTURE.md) (backend) · [FRONTEND.md](FRONTEND.md) (app) · [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) (changes and instructions) · [metrics_and_testing.md](metrics_and_testing.md) (metrics, tests, reports)
 
 > **Status (2026-11-24):** Phase 0 built the database tooling, not tables:
 >
 > - **`packages/data`:** connection pool (UTC, query timeouts on both ends, TLS required in production), health ping, and the worker leader lock.
 > - **Migrations:** forward-only SQL files in `db/migrations` (`npm run db:migrate`), and a check that rejects any logic in a migration (`npm run db:check`, 12 tests).
 > - **Local setup:** `db/local-setup.md`, which creates the `wildself_app` user (not a superuser) and the `wildself_dev` and `wildself_test` databases.
-> - **Integration tests:** 6 tests that run on a real PostgreSQL. They refuse to run against any database whose name lacks "test". All 6 pass on your local PostgreSQL 17 (2026-11-24).
+> - **Integration tests:** 6 tests that run on a real PostgreSQL. They refuse to run against any database whose name lacks "test". All 6 pass on your local PostgreSQL 17 (2026-11-24) and run in CI on PostgreSQL 17 on every push.
+> - **Sign-in (Phase 1, planned):** Supabase Auth holds emails and passwords. Our `users` table keeps only the Supabase user id, and `profiles` keeps the name, illustration avatar, height, weight and units (AUTH.md §4.3).
 >
 > Table and column lists below are still drafts; each phase's migrations are written after its questions are answered. On the phone, Phase 0 stores only the theme choice and the offline action queue, in a local key-value store (not in this database).
 
@@ -203,8 +204,8 @@ Index: `(user_id, deleted_at)`; partial index on rows where `penalty_applied_at`
 
 | Table | Phase | Holds | Written by | Key constraints · retention |
 | --- | --- | --- | --- | --- |
-| `users` | 1 | Account, email | Recording | Unique email |
-| `profiles` | 1 | Name, avatar, height, weight | Recording | 1 per user |
+| `users` | 1 | Account: `id` = the Supabase user id (`sub`), `created_at`. **No email or password**: Supabase Auth holds them (AUTH.md) | Recording | PK on the Supabase id; deleting cascades to everything the user owns |
+| `profiles` | 1 | Display name (1–40 characters), illustration avatar key (no photos), height and weight (optional, with sensible ranges), unit system (`metric` / `imperial`) | Recording | 1 per user; avatar key must be one of the illustration set |
 | `image_searches` | 9 | Photo path, photo hash, taken at, status, result species, confidence | Recording + Image search engine | Unique (user, photo hash) |
 | `species_cache` | 9 | Taxon id, scientific name, group, common names by language, English description, image links, sources | Image search engine | Unique taxon id; shared by all users |
 | `species_cards` | 9 | A user's card for one species, first-seen date and place | Image search engine | Unique (user, taxon) |

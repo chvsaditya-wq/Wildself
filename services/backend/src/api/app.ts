@@ -4,7 +4,7 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { ErrorCode, type ErrorResponse } from '@wildself/contracts';
 import type { InternalApi } from '@wildself/internal-api';
-import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest } from 'fastify';
 
 import type { AuthenticatedUser, Authenticator } from '../auth/authenticator';
 import type { Config } from '../config';
@@ -59,24 +59,32 @@ export async function buildApi({ config, internalApi, authenticator }: ApiDepend
   // Security headers on every response (ARCHITECTURE.md §3.6).
   await app.register(helmet, { global: true });
 
-  // Authentication runs before anything else touches the request. Unknown routes are
-  // treated as protected too, so an unauthenticated caller cannot discover which routes exist.
+  // Access control runs first, in three steps, before the body is read or any route runs.
+  // The order matters: the limit is applied BEFORE callers without a login are refused, so
+  // token guessing and route probing are rate-limited too (found in Phase 0 testing).
+  //
+  // 1. Identify: read the credential, never reject here.
   app.addHook('onRequest', async (request) => {
     if (request.routeOptions.config?.public === true) return;
-    const user = await authenticator.authenticate(request);
-    if (!user) throw errors.unauthenticated();
-    request.user = user;
+    request.user = await authenticator.authenticate(request);
   });
 
-  // Per-user limit once signed in, per-IP limit otherwise.
-  await app.register(rateLimit, {
-    global: true,
-    hook: 'preHandler',
+  // 2. Limit: per user once identified, per IP otherwise (including public health checks).
+  const rateLimitOptions = {
     max: config.http.rateLimitPerMinute,
     timeWindow: '1 minute',
-    keyGenerator: (request) => (request.user ? `user:${request.user.id}` : `ip:${request.ip}`),
+    keyGenerator: (request: FastifyRequest) => (request.user ? `user:${request.user.id}` : `ip:${request.ip}`),
     errorResponseBuilder: () =>
       new AppError(ErrorCode.RATE_LIMITED, 429, 'Too many requests. Wait a moment and try again.'),
+  };
+  await app.register(rateLimit, { global: false, ...rateLimitOptions });
+  app.addHook('onRequest', app.rateLimit(rateLimitOptions));
+
+  // 3. Enforce: everything except the health checks needs a login. Unknown routes are treated
+  //    as protected too, so an unauthenticated caller cannot discover which routes exist.
+  app.addHook('onRequest', async (request) => {
+    if (request.routeOptions.config?.public === true) return;
+    if (!request.user) throw errors.unauthenticated();
   });
 
   app.setNotFoundHandler(async () => {

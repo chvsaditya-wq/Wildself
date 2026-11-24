@@ -7,3 +7,8 @@ import { setUpTests } from 'react-native-reanimated';
 
 // Lets Reanimated animated styles run synchronously in Jest.
 setUpTests();
+
+// Keyboard handling is native; tests use the library's own mock (plain View / ScrollView).
+jest.mock('react-native-keyboard-controller', () =>
+  jest.requireActual('react-native-keyboard-controller/jest'),
+);

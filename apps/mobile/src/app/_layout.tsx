@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { AppThemeProvider, useTheme } from '@/design/theme';
 import { colors as palette, gutter, radius, space } from '@/design/tokens';
@@ -39,9 +40,12 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={styles.fill}>
-      <AppThemeProvider>
-        <Navigation />
-      </AppThemeProvider>
+      {/* Tracks the keyboard frame by frame on the UI thread for every screen (FRONTEND.md §7.4). */}
+      <KeyboardProvider>
+        <AppThemeProvider>
+          <Navigation />
+        </AppThemeProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }

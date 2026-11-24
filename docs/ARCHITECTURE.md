@@ -2,7 +2,7 @@
 
 _As of 2026-11-24 · Stack approved · Phase 0 backend built in `services/backend`_
 
-**Related docs:** [POA.md](POA.md) (plan and progress) · [FRONTEND.md](FRONTEND.md) (app) · [DB.md](DB.md) (database) · [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) (changes and instructions)
+**Related docs:** [POA.md](POA.md) (plan and progress) · [FRONTEND.md](FRONTEND.md) (app) · [DB.md](DB.md) (database) · [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) (changes and instructions) · [metrics_and_testing.md](metrics_and_testing.md) (metrics, tests, reports)
 
 The system has **4 strictly separated layers** and **6 engines**: Habit tracker, Step tracker, Water tracker, Mana, Analytics and Image search. The database layer only stores and retrieves. Engines only calculate. The internal API is the only path between engines and the database. Four efficiency rules (§6) keep this fast: atomic grouped writes, batches of users, counting in the database without deciding there, and in-process calls.
 
@@ -13,7 +13,13 @@ The system has **4 strictly separated layers** and **6 engines**: Habit tracker,
 > - **Layer 4:** `packages/data`, with the connection pool, health ping and leader lock.
 > - **Engines:** none yet. The first one arrives in Phase 3.
 >
-> Auth is an interface (`deny-all` by default, a local-only test login for development) until the provider is chosen before Phase 1. §11 lists what is still open.
+> - **Testing (2026-11-24):**
+>   - CI on GitHub runs every check on each push.
+>   - A layer-boundary lint enforces §2 (dependency-cruiser).
+>   - k6 load tests measured about 1,000 requests per second, clean, on one instance on a laptop.
+>   - One security fix: the rate limit now runs **before** the login check, so callers without a login are limited by IP too (§3.6).
+>
+> Auth is an interface (`deny-all` by default, a local-only test login for development). **Supabase Auth was chosen on 2026-11-24** and is built in Phase 1 (§3.7, [AUTH.md](AUTH.md)). §11 lists what is still open.
 
 ---
 
@@ -168,10 +174,20 @@ Security is a priority in every phase, not a final audit.
 - **Parameterised SQL only**; no SQL built from strings.
 - **Secrets only in environment variables**, never in code or git; the server refuses to start if a required secret is missing or a development-only setting is on in production.
 - **Errors never leak internals**: users get an error code and a request id; details go to the logs and Sentry.
-- **Limits everywhere**: request size, rate limits per user and per IP, query timeouts.
+- **Limits everywhere**: request size, rate limits per user and per IP, query timeouts. Access control runs in this order, before the body is read: identify the caller from the token → apply the rate limit (per user, or per IP without a login) → refuse callers without a login. Limiting before refusing means token guessing and route probing are limited too (security fix from Phase 0 testing).
 - **Security headers** on every response; HTTPS only in staging and production.
 - **Dependencies** checked by `npm audit` in CI; reviewed before adding.
 - **Every phase's testing stage includes security checks** for the endpoints it adds (access to another user's data, malformed input, limits).
+
+### 3.7 Sign-in (decided 2026-11-24, built in Phase 1)
+
+Full plan and setup steps: [AUTH.md](AUTH.md).
+
+- **Supabase Auth** handles sign-in only: Apple, Google and email. Passwords, emails and Apple or Google identities live there, never in our database.
+- The phone sends Supabase's short-lived access token to our API. Our `supabase` authenticator verifies it **locally** with Supabase's public keys (ES256 only; issuer, audience, expiry checked), cached, so there is no call to Supabase per request.
+- The user id is the token's `sub`. It is also the primary key of our `users` table.
+- The Supabase secret key lives only on the server and is used only to delete an account. Account deletion removes our data first, then the Supabase user, and is safe to repeat.
+- `dev-stub` stays for local work and tests; production refuses it, and refuses to start without the Supabase settings.
 
 ---
 
@@ -475,7 +491,7 @@ Chosen for lowest running cost, speed, ease of building, no silent failures and 
 | Database | **Managed PostgreSQL** (e.g. Neon or Supabase-hosted Postgres) in staging and production; local PostgreSQL 17 in development |
 | Migrations | Plain SQL files, forward-only, CI check against logic objects |
 | Object storage | S3-compatible bucket for photos |
-| Auth | **Decided before Phase 1.** Phase 0 has an authentication interface and a development-only stub that refuses to start in production |
+| Auth | **Supabase Auth** (decided 2026-11-24): sign-in only, tokens verified locally by our API with Supabase's public keys (§3.7, AUTH.md). Phase 0 has the authentication interface and a development-only stub that refuses to start in production |
 | Testing | Vitest (engines, API, data layer on a real PostgreSQL), Maestro end-to-end, load test of the midnight pipeline |
 | CI/CD | GitHub Actions; EAS Build / Submit / Update |
 | Monitoring | Sentry (API and worker) with all personal-data collection switched off, Sentry Crons check-ins from the worker heartbeat, structured logs with request ids and redacted secrets, health endpoints (`/health`, `/health/ready`) with an uptime monitor, midnight completeness check |
@@ -623,7 +639,7 @@ Before launch, the midnight pipeline is load-tested with 100,000 simulated users
 ### 11.7 Stack and hosting
 
 1. ~~Accept the proposed stack?~~ Answered 2026-11-24: approved, always-on Fastify, managed PostgreSQL (§8.1).
-2. **Auth:** managed provider (e.g. Supabase Auth, Clerk) or our own? Deferred: decided before Phase 1.
+2. ~~**Auth:** managed provider or our own?~~ Answered 2026-11-24: **Supabase Auth** (§3.7, AUTH.md). Still open in AUTH.md §9: email with a password or a one-time code (or both); Apple sign-in on Android; bundle id.
 3. **Hosting:** which host, and a budget? Decided before Phase 0's deployment stage, after comparing current prices.
 4. iOS and Android together from Phase 0?
 

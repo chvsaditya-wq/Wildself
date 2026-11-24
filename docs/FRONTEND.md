@@ -4,9 +4,9 @@ _As of 2026-11-24 · Phase 0 frontend built in `apps/mobile`, awaiting your revi
 
 The app should feel like a high-craft botanical field journal: light, smooth and calming to touch, so every tap gives a small, satisfying, almost ASMR-like response. **Smoothness is non-negotiable.** Every screen, list and transition is judged first on how it feels, then on how it looks.
 
-> **Status (2026-11-24):** Phase 0 built the foundations described here: tokens (§3–6), base components, tab bar, slide-out menu, theme switch, offline queue and performance settings (§7). You reviewed it on a phone: **the design meets your expectations; 120 fps was not reached at first.** Press feedback was moved to native code and the iOS 120 Hz setting added; re-tested in production mode it is **much smoother** (2026-11-24). 120 fps is confirmed on a production build (§7.3). Screens for later phases are placeholders. Items marked **(proposed)** still need your yes or no; choices made during the Phase 0 build are listed in §13.4.
+> **Status (2026-11-24):** Phase 0 built the foundations described here: tokens (§3–6), base components, tab bar, slide-out menu, theme switch, offline queue and performance settings (§7). You reviewed it on a phone: **the design meets your expectations; 120 fps was not reached at first.** Press feedback was moved to native code and the iOS 120 Hz setting added; re-tested in production mode it is **much smoother** (2026-11-24). 120 fps is confirmed on a production build (§7.3). **Keyboard avoidance and scroll inset adjustments** (§7.4, non-negotiable) were added on 2026-11-24 to every screen, and **you confirmed them on your phone** the same day. Phase 1 answers are recorded in §13.5 (planned, not built). Screens for later phases are placeholders. Items marked **(proposed)** still need your yes or no; choices made during the Phase 0 build are listed in §13.4.
 
-**Related docs:** [POA.md](POA.md) (plan and progress) · [ARCHITECTURE.md](ARCHITECTURE.md) (backend) · [DB.md](DB.md) (database) · [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) (changes and instructions)
+**Related docs:** [POA.md](POA.md) (plan and progress) · [ARCHITECTURE.md](ARCHITECTURE.md) (backend) · [DB.md](DB.md) (database) · [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) (changes and instructions) · [metrics_and_testing.md](metrics_and_testing.md) (metrics, tests, reports)
 
 ---
 
@@ -25,6 +25,7 @@ The app should feel like a high-craft botanical field journal: light, smooth and
 6. **Steps and water tiles are always shown on Home.** There is no option to hide them.
 7. **Habits sit in their own scroll box.** The box has the same background as the page. The scrollbar appears only while scrolling and fades calmly into the background. Tapping a habit's tick mark or its name strikes it through, turns it very light and marks it done for the day.
 8. **One exception to rule 3:** thin rules above and below each habit row in the habits box. They are drawn in a warm tone close to the background (never grey #E5E7EB), just visible enough to separate the rows (§9.2).
+9. **Keyboard avoidance and scroll inset adjustments are non-negotiable** (2026-11-24). The keyboard never covers the field being typed in or the button that submits it, on any screen, sheet or phone. Any difficulty implementing this is reported to you immediately (§7.4).
 
 ---
 
@@ -212,6 +213,40 @@ No linear easing, and no motion longer than 500 ms except the level-up moment.
 
 **How 120 fps is verified:** only on a production-mode build of our own app (a development or preview build from EAS), on a 120 Hz phone, with the Perf Monitor or Instruments showing 120 fps on the UI thread through every transition in the phase. Expo Go in development mode cannot prove it: it runs extra development checks, and on iPhone it uses Expo Go's own frame-rate setting rather than ours.
 
+### 7.4 Keyboard avoidance and scroll insets (non-negotiable, 2026-11-24)
+
+**Rule:** the keyboard never hides the field being typed in, or the button that submits it. Content moves with the keyboard, frame by frame, on the UI thread, so it meets the 120 fps rule. If anything stops this from working, you are told immediately.
+
+**Library:** `react-native-keyboard-controller` 1.22.7, the version Expo SDK 58 recommends. It is included in Expo Go, so it works in your Expo Go tests as well as our own builds. It tracks the keyboard natively on iOS and Android, including Android's edge-to-edge mode, which it detects itself. `KeyboardProvider` wraps the whole app in the root layout.
+
+| Where | Component | What it does |
+| --- | --- | --- |
+| Every scrolling page (`Screen scroll`), the slide-out menu, the design preview | `KeyboardScrollView` (`src/components`), built on `KeyboardAwareScrollView` | When a field gains focus, scrolls it to sit 24 pt (`KEYBOARD_GAP`) above the keyboard and follows the caret in multi-line fields |
+| Every fixed page (`Screen` without `scroll`) | `KeyboardAvoidingView` from the library, `behavior="padding"`, `automaticOffset` | Shrinks the content area by the keyboard's height. Its offset removes the tab-bar clearance, because the keyboard covers the tab bar, so the content ends 24 pt above the keyboard instead of 136 pt |
+| Sheets (from Phase 2, Create habit) | Same rule | Set up and checked with the first sheet |
+
+**Scroll inset adjustments:**
+
+- The keyboard's height is added as a **bottom content inset**, on iOS through `contentInset` and on Android through the library's clipping scroll view. The scroll indicator moves with it. Nothing is re-laid out while the keyboard moves, which is the cheapest path for smoothness.
+- iOS's own automatic adjustments are **off** (`contentInsetAdjustmentBehavior="never"`, `automaticallyAdjustKeyboardInsets={false}`), so no inset is ever added twice. Safe areas are handled by our own layout (`SafeAreaView` at the top, tab-bar clearance at the bottom).
+- **Taps while typing** (`keyboardShouldPersistTaps="handled"`): a tap on a button works first time; a tap on empty space closes the keyboard.
+- **Dismissing:** on iOS, dragging the content drags the keyboard down with it (`interactive`). On Android, dragging closes it (`on-drag`).
+
+**Enforced:** a lint rule blocks React Native's own `ScrollView` and `KeyboardAvoidingView`, so every screen has to use the keyboard-aware versions. Pages with text fields use `Screen scroll`.
+
+**Text field:** `TextField` (`src/components`) is a filled `sand` surface that turns `sageMist` while focused. It has no outline or border (§1 rule 3), a 52 pt minimum height, `forest` cursor and selection, and its label is read by screen readers.
+
+**Checks:**
+
+- **Unit tests:** the settings above are in place on scrolling and fixed pages, and the text field is labelled and changes tone when focused.
+- **On your phone:** on Settings → Open design preview, scroll to "Text fields · keyboard check" at the bottom of the page.
+  1. Tap each field. It rises above the keyboard with a gap, moving together with the keyboard.
+  2. Type several lines in "Journal". The caret stays visible.
+  3. Drag the page. The keyboard follows (iOS) or closes (Android).
+  4. Tap empty space. The keyboard closes.
+
+  Do this on iOS and Android, in light and dark.
+
 ---
 
 ## 8. Frontend and the layer rules
@@ -321,8 +356,8 @@ The app is **Layer 1 (client / recording)** in [ARCHITECTURE.md](ARCHITECTURE.md
 
 | Screen | Tab / entry | Phase | Notes |
 | --- | --- | --- | --- |
-| Welcome, sign up, log in, reset password | — | 1 | One quiet illustrated welcome; no carousel of feature slides |
-| Onboarding: name, body details, permissions | — | 1 | 3 short steps, each skippable except name |
+| Welcome, sign in (Apple, Google, email), reset password | — | 1 | One quiet illustrated welcome with a time-of-day headline (§13.5); no carousel of feature slides. Sign-in plan: AUTH.md |
+| Onboarding: name, illustration avatar, height and weight | — | 1 | 3 short steps, each skippable except name; no profile photos; location asked later (Phase 11) |
 | Home | Home tab | 3 | From your sketch (§9.2) |
 | Slide-out menu | Hamburger | 0 (shell), filled as features land | §9.1 |
 | My Habits: list, create, edit, delete | Menu | 2 | Schedule (all days, except Sunday, custom days) and optional time window; delete confirmation shows the mana cost (proposed) |
@@ -395,6 +430,7 @@ apps/mobile/
 | expo, expo-router, react-native-screens | App, navigation, native transitions |
 | @react-navigation/drawer (through Expo Router's Drawer) | Slide-out menu |
 | react-native-reanimated, react-native-gesture-handler | Motion and gestures on the UI thread |
+| react-native-keyboard-controller (1.22.7) | Keyboard avoidance and scroll insets on the UI thread (§7.4); included in Expo Go |
 | @shopify/flash-list (v2) | Lists and grids |
 | expo-image | Images with ThumbHash placeholders |
 | expo-haptics, expo-audio | Haptics and soft sounds |
@@ -489,3 +525,47 @@ Every frontend stage ends with: screenshots on both platforms in light and dark,
 | Press feedback | Native Gesture Handler `Touchable`, 80 ms in / 220 ms out, timed rather than spring (the native animation offers timing only) | Yes |
 | Sounds | None yet | — |
 | Design preview page | Settings → "Open design preview" (development builds only) | Removed before launch |
+| Text field look | Filled `sand`, `sageMist` while focused, 20 pt corners, label above (§7.4) | Yes |
+| Keyboard gap | 24 pt between the focused field (or the end of a fixed page) and the keyboard | Yes, one constant |
+| Keyboard dismissal | iOS: drag the keyboard down with the content. Android: dragging closes it. Tapping empty space closes it on both | Yes |
+
+### 13.5 Phase 1: accounts and onboarding (answered 2026-11-24, planned, not built)
+
+Full sign-in plan and setup steps: [AUTH.md](AUTH.md).
+
+| # | Question | Your answer |
+| --- | --- | --- |
+| A1 | Who handles sign-in | **Supabase Auth** (sign-in only; app data stays in our database) |
+| A2 | Sign-in methods | Recommended: Apple, Google, email |
+| A3 | Email confirmation | **Required for email and password accounts.** To confirm whether email uses a password instead of, or as well as, the one-time code (AUTH.md §9) |
+| A4 | Onboarding steps | Recommended: name (required), avatar, height and weight (optional); 3 short steps |
+| A5 | Avatar | **Nature illustrations only. No profile photos: this is not a social network** |
+| A6 | Units | Follow the phone's region, with a switch in Settings |
+| A7 | Location permission | When first needed (Phase 11), not during onboarding |
+| A8 | Minimum age | "13 or older" confirmation; no birth date stored |
+| A9 | Delete account | Settings → Account; confirm on a second screen; delete everything immediately |
+| A10 | Several devices | Allowed; stay signed in until signing out |
+| A11 | Welcome headline | **Changes with the time of day**; proposals below |
+| A12 | Terms and privacy | Links on the sign-up screen; documents written before launch |
+
+**Welcome headlines by time of day (proposed, pick one per band or ask for more).** The bands match the Home greeting (`greeting.ts`). Literata headline, DM Sans line below, no exclamation marks (§11).
+
+| Time | Option 1 | Option 2 | Option 3 |
+| --- | --- | --- | --- |
+| Morning (05:00–11:59) | **The day is still quiet.** Step into it gently. | **Morning light, fresh air.** Your wild side is waiting. | **Before the noise begins.** Find a little green. |
+| Afternoon (12:00–16:59) | **Take the long way round.** There's more outside than on screen. | **A pause in the middle of the day.** Notice what's growing. | **Somewhere nearby, something is blooming.** Go and see. |
+| Evening (17:00–21:59) | **The light is turning gold.** A slow walk still counts. | **Evening, unhurried.** Let the day settle outdoors. | **Listen for the birds heading home.** |
+| Night (22:00–04:59) | **The world has gone quiet.** Tomorrow is a fresh trail. | **Rest well.** The wild will be there in the morning. | **Look up. The night sky is nature too.** |
+
+The night band is new: the Home greeting currently says "Good evening" from 17:00 to 04:59. Adding "Good night" to Home is a separate yes or no for you.
+
+**Onboarding (planned):**
+
+1. Welcome
+2. Sign in: Apple · Google · Email
+3. Name
+4. Choose an illustration
+5. Height and weight (optional, in your units)
+6. Home
+
+Steps 3–5 each fit one screen, use the keyboard rule (§7.4), and can be skipped except the name. The "13 or older" confirmation and the terms and privacy links are on the sign-in screen.

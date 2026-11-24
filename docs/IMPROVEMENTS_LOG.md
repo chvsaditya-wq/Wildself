@@ -4,7 +4,7 @@ _As of 2026-11-24_
 
 Every build stage of every phase gets an entry here: what was planned, what was actually built, what you asked to change afterwards, and a side-by-side comparison. Every instruction you give is also logged, with the doc it changed.
 
-**Related docs:** [POA.md](POA.md) (plan and progress) · [FRONTEND.md](FRONTEND.md) (app) · [ARCHITECTURE.md](ARCHITECTURE.md) (backend) · [DB.md](DB.md) (database)
+**Related docs:** [POA.md](POA.md) (plan and progress) · [FRONTEND.md](FRONTEND.md) (app) · [ARCHITECTURE.md](ARCHITECTURE.md) (backend) · [DB.md](DB.md) (database) · [metrics_and_testing.md](metrics_and_testing.md) (metrics, tests, reports)
 
 **How entries are kept**
 
@@ -18,7 +18,7 @@ Every build stage of every phase gets an entry here: what was planned, what was 
 
 ### Frontend — Phase 0: Foundations
 
-_Built 2026-11-23 · Reviewed on your phone 2026-11-24 · Changes made 2026-11-24 · Re-tested by you 2026-11-24: much smoother · Status: waiting for the 120 fps check on a production build_
+_Built 2026-11-23 · Reviewed on your phone 2026-11-24 · Changes made 2026-11-24 · Re-tested by you 2026-11-24: much smoother · Keyboard avoidance added and confirmed on your phone 2026-11-24 · Status: waiting for the 120 fps check on a production build_
 
 #### 1. What was in plan
 
@@ -58,7 +58,18 @@ From your review on 2026-11-24:
    - **iOS 120 Hz unlocked.** Added `CADisableMinimumFrameDurationOnPhone` to the iOS settings. Without it, iOS caps every app at 60 fps on ProMotion iPhones.
    - **Testing in production mode.** Added `npm run mobile:perf`. The normal development mode runs extra checks that slow everything down, so it can't show the real frame rate.
    - **Test setup** adjusted for the native component, including a Windows-specific path issue in Jest.
-3. **Still open before this stage can be ticked:**
+3. **Keyboard avoidance and scroll inset adjustments: non-negotiable** (your instruction, 2026-11-24). Changes made the same day (FRONTEND.md §7.4):
+   - Added `react-native-keyboard-controller` 1.22.7, the version Expo SDK 58 recommends. It is included in Expo Go, so it can be tested without a development build. `KeyboardProvider` wraps the app.
+   - `KeyboardScrollView`: every scroll view in the app (the scrolling `Screen`, the slide-out menu, the design preview).
+     - The focused field is scrolled 24 pt above the keyboard.
+     - The keyboard height becomes a content inset, moving the scroll indicator too, with no re-layout.
+     - iOS's own automatic insets are off, so nothing is added twice.
+     - Taps work while typing; dragging dismisses the keyboard.
+   - Fixed pages use the library's `KeyboardAvoidingView` (padding, automatic offset). The offset removes the tab-bar clearance, so content ends 24 pt above the keyboard.
+   - New `TextField` component, and a "Text fields · keyboard check" section at the bottom of the design preview.
+   - A lint rule now blocks React Native's own `ScrollView` and `KeyboardAvoidingView`.
+   - 3 new tests: 48 pass. Typecheck, lint, expo-doctor 20/20 and both bundles pass. `npm audit` shows no new advisories.
+4. **Still open before this stage can be ticked:**
    - Android: ask the phone for its highest refresh rate. This needs a small native setting and a development build (Phase 0 deployment stage).
    - Verify 120 fps on a production build of our own app on a 120 Hz phone. Expo Go can't prove it: on iPhone it uses Expo Go's own frame-rate setting, not ours. This needs an Expo account for EAS builds, and your phone model.
 
@@ -78,7 +89,9 @@ From your review on 2026-11-24:
 | Performance testing | Flashlight, profiler | Development mode in Expo Go | `npm run mobile:perf`; final check on a production build | ✅ You re-tested: much smoother. ⏳ Production-build check pending |
 | On-device storage | MMKV | expo-sqlite key-value store | Unchanged | 🔁 Changed during build (runs in Expo Go) |
 | Fonts | DM Sans + Literata | 6 weights, 1.1 MB | Unchanged | ✅ |
-| Checks | Typecheck, lint, tests | All passing (45 tests) | All passing (45 tests), bundles build | ✅ |
+| Checks | Typecheck, lint, tests | All passing (45 tests) | All passing (48 tests), bundles build (4.3 MB each) | ✅ |
+| Keyboard avoidance and scroll insets | Not in plan | None (no text fields yet) | **Non-negotiable (your rule):** keyboard-controller on every screen, inset-based scrolling, lint-enforced | ✅ Built and confirmed on your phone |
+| Text field | Not in plan for Phase 0 | None | `TextField`: filled, tonal focus, no border | ✅ Look to confirm |
 
 ### Backend — Phase 0: Foundations
 
@@ -132,7 +145,8 @@ From POA.md Phase 0 and ARCHITECTURE.md:
 None from you yet. Known follow-ups:
 
 1. Graceful shutdown on a stop signal could not be exercised on Windows; it is verified on Linux in the deployment stage.
-2. Layer-boundary lint (engines cannot import the data layer) is part of the testing stage.
+2. Layer-boundary lint (engines cannot import the data layer) is part of the testing stage. **Done 2026-11-24:** passes, with no violations.
+3. **Security fix from the testing stage (2026-11-24):** the login check ran before the rate limit, so callers without a login were never rate-limited. Access control now runs in this order: identify → limit (per user, or per IP) → refuse. Unknown routes and token guessing are limited too. 3 new tests; confirmed with k6 (Testing Phase 0 entry below).
 
 #### 4. Comparison table
 
@@ -145,7 +159,7 @@ None from you yet. Known follow-ups:
 | Error reporting | Sentry | Sentry 11, personal data off, Crons heartbeat | — | ✅ (privacy defaults found and fixed during build) |
 | Single worker | One active copy | PostgreSQL advisory lock, verified each tick | — | ✅ (DB test pending) |
 | Request validation library | Zod type provider | Zod for config only; route validation added with the first request bodies | — | 🔁 Fewer dependencies in Phase 0 |
-| Security rules §3.6 | All | Headers, limits, auth by default, safe errors, redaction, fail-fast config | — | ✅ |
+| Security rules §3.6 | All | Headers, limits, auth by default, safe errors, redaction, fail-fast config | Rate limit moved before the login check (callers without a login were unlimited) | ✅ Fixed in testing |
 | Tests | Unit tests | 37 passing | — | ✅ |
 
 ### DB — Phase 0: Foundations
@@ -199,6 +213,53 @@ From POA.md Phase 0 and DB.md: PostgreSQL environments (local, staging, producti
 | Integration tests | On a real PostgreSQL | 6 written, skip loudly without a test database | 3 test mistakes fixed; crash test now kills the connection and checks the holder notices; 6/6 pass, 4 runs in a row | ✅ |
 | First migration run | — | Not run (no database) | Tool verified on `wildself_test`, then ran on `wildself_dev` after your `.env` fix | ✅ |
 
+### Testing — Phase 0: Foundations
+
+_Run 2026-11-24 · Status: done locally; first CI run on GitHub with the push of 2026-11-24 · Report: `reports/phase-00-testing.md`_
+
+#### 1. What was in plan
+
+From POA.md Phase 0 and metrics_and_testing.md §2: CI pipeline; lint rules that enforce the layer boundaries; k6 smoke, breakpoint and rate-limit checks; dependency audit; secret scanning; security tests for the existing endpoints.
+
+#### 2. What was done (original implementation, 2026-11-24)
+
+- **CI** (`.github/workflows/ci.yml`), on every push and pull request:
+  - typecheck, lint and layer lint
+  - the migration check
+  - all tests, with PostgreSQL 17 as a service
+  - migrations applied to a fresh database
+  - a production build
+  - k6 smoke and rate-limit checks on the built server
+  - a security job: `npm audit` fails on high or critical vulnerabilities in runtime dependencies, and gitleaks scans the full history, with its download checksum-verified
+  - third-party actions pinned to full commit SHAs
+- **Layer-boundary lint:** dependency-cruiser 18.9.0, 8 rules (`.dependency-cruiser.cjs`, `npm run lint:layers`, part of `npm run lint`).
+- **k6 scripts** in `tests/load/`: smoke, steady, breakpoint, rate-limit. Run locally with k6 2.4.0.
+- **3 new API security tests.** 106 tests in total.
+
+#### 3. Required changes
+
+Found by the testing itself (2026-11-24):
+
+1. **Security gap:** callers without a login were never rate-limited, because the login check ran first. Fixed (Backend Phase 0 entry, item 3).
+2. **Two bugs in the layer rules**, found by testing each rule with a deliberate violation:
+   - `node_modules` was excluded, so the database-driver rule could never fire.
+   - The first cycle sample wasn't a real cycle.
+   Both fixed; every rule now proven.
+3. **k6 rate-limit test counting:** public health checks share the per-IP allowance, so the test now allows a few earlier calls from the same IP.
+4. **Capacity:** about 1,000 requests per second clean on one instance on a laptop; above that, some connections are refused. To be re-measured on staging.
+5. **Local secret scan** blocked by this computer's permission settings; it runs in CI.
+
+#### 4. Comparison table
+
+| Aspect | In plan | Original implementation (2026-11-24) | After changes | Status |
+| --- | --- | --- | --- | --- |
+| CI | Pipeline on every push | GitHub Actions with PostgreSQL, k6, audit, secret scan | — | ✅ Built · ⏳ first run |
+| Layer lint | Lint rules for layer boundaries | dependency-cruiser, 8 rules | 2 rule bugs fixed; each rule proven | ✅ |
+| Rate limit (§3.6) | Per user and per IP | Per user only in practice (callers without a login skipped it) | Identify → limit → refuse | ✅ Fixed |
+| Load baseline | Smoke, breakpoint, rate-limit | All run | Rate-limit test counting fixed | ✅ |
+| Secret scan | gitleaks | Blocked locally | Runs in CI | ⏳ first CI run |
+| Tests | All green | 106 pass | — | ✅ |
+
 ---
 
 ## Instructions log
@@ -207,6 +268,9 @@ Everything you have asked for, newest first, with where it was applied.
 
 | Date | Instruction | Applied in |
 | --- | --- | --- |
+| 2026-11-24 | Phase 1 answers A1–A12: Supabase Auth (give all setup steps), recommended sign-in methods, email confirmation for email and password, illustration avatars and no profile photos, location when needed, 13+, delete account, several devices, time-of-day welcome headlines, terms links. **Plan only, do not develop.** Keyboard avoidance looks good on the phone. Continue with the next steps, then push | AUTH.md (new); FRONTEND.md §13.5, §9.4; POA.md Phase 1, status, §10; ARCHITECTURE.md §3.7, §11.7; DB.md; Phase 0 testing stage run (CI, layer lint, k6, security fix); `reports/phase-00-testing.md`; metrics_and_testing.md; pushed |
+| 2026-11-24 | Implement KeyboardAvoidingView and scroll view inset adjustments: non-negotiable, report any difficulty immediately; update POA and FRONTEND docs; then move to the next frontend phase | `apps/mobile` (keyboard-controller, `KeyboardScrollView`, `Screen`, `TextField`, lint rule); FRONTEND.md §1 rule 9, §7.4, §12, §13.4; POA.md principle 11, Phase 0, §8, risks; Frontend Phase 0 entry; metrics_and_testing.md; memory |
+| 2026-11-24 | Test every phase with the tests that fit the stack (unit, k6, …); create and keep updating metrics_and_testing.md as the notebook and reference for metrics (database growth, data per user per action, server load, rate limits, load balancing…), with a metrics table by category; write a report in a separate folder after every development and testing stage (what happened, deviations and fixes, adequacy of the plan, summary table, with technical headings); push only after you review and confirm; save both rules to memory | `docs/metrics_and_testing.md`; `docs/reports/phase-00-frontend.md`, `phase-00-backend.md`, `phase-00-database.md`; POA.md §8 and doc table; memory; not pushed, waiting for your review |
 | 2026-11-24 | Commit and push the backend and database work to GitHub | Commit `2b8ea27` pushed to `main` (checked first: no `.env` or real password in the commit) |
 | 2026-11-24 | `.env` password fixed | First migration ran on `wildself_dev`; POA.md, DB Phase 0 entry |
 | 2026-11-24 | Local database setup done; check it | Integration tests run and fixed; API, worker and migration verified; `.env` finding reported (DB Phase 0 entry; POA.md) |

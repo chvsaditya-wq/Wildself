@@ -4,7 +4,7 @@ _As of 2026-11-24 · "Wildself" is a working name_
 
 We will build a React Native (Expo) habit tracker that gets people outdoors. The work runs in **18 phases (Phase 0–17)**, one feature at a time. Each phase goes **Frontend → Backend → Database migrations → Rigorous testing → Update and deployment**.
 
-> **Status (2026-11-24): Phase 0 in progress.** Frontend: design approved; after the smoothness changes you found it much smoother in production mode; 120 fps still to be confirmed on a production build. Backend and database stages built and tested (100 tests pass, including 6 on your local PostgreSQL); the API, worker and migration tool were run against your local database, and the first migration ran on `wildself_dev`. Testing and deployment stages not started. Phases 1–17 not started. Code is on GitHub: `chvsaditya-wq/Wildself`.
+> **Status (2026-11-24): Phase 0 in progress. Frontend, backend and testing stages done; database stage done locally; deployment stage not started.** Frontend: design approved, much smoother in production mode, keyboard avoidance confirmed by you on your phone; 120 fps still to be confirmed on a production build. Backend and database: built and run against your local PostgreSQL. Testing: CI on GitHub, layer-boundary lint, k6 load baseline (clean to about 1,000 requests per second on one instance), and one security gap found and fixed; 106 tests pass. **Phase 1:** questions answered and planned (sign-in with Supabase Auth, AUTH.md); not built. Code is on GitHub: `chvsaditya-wq/Wildself`.
 
 This file is the overall plan and progress tracker. The detailed docs:
 
@@ -14,6 +14,9 @@ This file is the overall plan and progress tracker. The detailed docs:
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Backend: layers, 6 engines, ticket system, efficiency rules, midnight pipeline, offline data, security rules, approved stack, API | Stack approved; Phase 0 backend built |
 | [DB.md](DB.md) | Tables, who supplies each value, data-layer operations, migrations, data growth and retention | Phase 0 tooling built; feature tables start in Phase 1 |
 | [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) | Per phase and part: plan, what was built, required changes, comparison table; log of every instruction | Started 2026-11-24 |
+| [AUTH.md](AUTH.md) | Sign-in with Supabase Auth: decisions, how it fits the layers, your setup steps, what is built in each Phase 1 stage, costs, security checklist | Planned 2026-11-24, not built |
+| [metrics_and_testing.md](metrics_and_testing.md) | Testing strategy per module (unit, integration, k6, end-to-end, frame rate, security); metric tables by category with targets; capacity model; limits in force; test log; improvement backlog | Started 2026-11-24 |
+| [reports/](reports/) | One report per development and testing stage: execution against plan, deviations and remediation, adequacy of the plan, summary matrix | Phase 0 frontend, backend and database reports written |
 
 If this file disagrees with a detailed doc, the detailed doc wins.
 
@@ -33,21 +36,31 @@ Tick a stage only when its exit check (Section 8) passes. A phase is done when a
   - [x] Design and layout approved (2026-11-24)
   - [x] Smoothness re-test in production mode (2026-11-24)
   - [ ] 120 fps confirmed on a production build on a 120 Hz phone (needs the development build below)
-- [ ] Backend: one build with `api` and `worker` roles, internal API interface, scheduler skeleton, auth wiring
+  - 2026-11-24: **keyboard avoidance and scroll inset adjustments** added (your non-negotiable rule): `react-native-keyboard-controller` 1.22.7 (included in Expo Go), `KeyboardProvider` at the root, `KeyboardScrollView` for every scrolling page, `KeyboardAvoidingView` for fixed pages, a `TextField` component, a lint rule that blocks React Native's own scroll view and avoiding view, and 3 new tests (48 pass). Typecheck, lint, expo-doctor 20/20 and both bundles (4.3 MB each) pass.
+  - [x] Keyboard check on your phone (2026-11-24: "looking good")
+- [x] Backend: one build with `api` and `worker` roles, internal API interface, scheduler skeleton, auth wiring
   - 2026-11-24: built in `services/backend` with `packages/contracts`, `packages/internal-api`. Fastify 5 API with health checks, `/v1/session`, request ids, security headers, rate and size limits, safe error format; worker with minute scheduler, single-leader lock and heartbeat; fail-fast config; Sentry with all personal-data collection off; auth interface with `deny-all` default and a development-only stub. 37 backend tests pass; production build (21 KB) starts and answers.
   - 2026-11-24: run against your local PostgreSQL: `/health/ready` reports the database ok; login is required on `/v1/session` and on unknown routes; of two workers started together, only one became leader and its heartbeat ran on the minute.
-  - Still to tick: the layer-boundary lint (Testing stage).
+  - 2026-11-24 (testing stage): layer-boundary lint passes. **Security fix:** callers without a login are now rate-limited by IP before the login check (they were not limited at all). Graceful shutdown is verified on Linux in the deployment stage.
 - [ ] Database: PostgreSQL environments (local / staging / prod), migration tool, data-layer skeleton, monthly partition creation
   - 2026-11-24: `packages/data` (pool with UTC and timeouts, ping, advisory leader lock), forward-only SQL migrations with node-pg-migrate, CI check that rejects logic in migrations (12 tests), local setup guide, 6 integration tests ready.
   - 2026-11-24: you set up local PostgreSQL. All 6 integration tests pass (4 runs in a row); 3 had failed at first because of mistakes in the tests, now fixed (IMPROVEMENTS_LOG.md, DB Phase 0). `db:migrate` ran (safety check, connection, nothing to apply yet).
   - 2026-11-24: you fixed the `DATABASE_URL` password in `.env`; `npm run db:migrate` ran on `wildself_dev`. **Local environment done.**
   - Still to tick: staging and production databases come with the deployment stage. Monthly partition creation moves to Phase 3, where the first partitioned table appears.
 - [ ] Testing: CI pipeline, lint rules that enforce the layer boundaries
+  - 2026-11-24: CI on GitHub Actions: typecheck, lint, layer lint, migration check, all tests on PostgreSQL 17, migrations, production build, k6 smoke and rate-limit checks, `npm audit`, gitleaks secret scan; actions pinned to commit SHAs.
+  - 2026-11-24: layer-boundary lint (dependency-cruiser, 8 rules, each proven with a deliberate violation).
+  - 2026-11-24: k6 smoke, steady rates, breakpoint and rate-limit tests. Clean to about 1,000 requests per second on one instance (laptop); re-measured on staging.
+  - 2026-11-24: one security gap found and fixed (rate limit before the login check). 106 tests pass. Report: `reports/phase-00-testing.md`.
+  - To tick: the first CI run on GitHub is green.
 - [ ] Deployment: EAS dev builds (with the Android highest-refresh-rate setting and the iOS 120 Hz key), staging API and worker deployed, Sentry
 
 ### Phase 1 — Accounts and onboarding
 
 - [ ] Questions answered and rules confirmed
+  - 2026-11-24: you asked to move to Phase 1 frontend. Questions A1–A12 sent (FRONTEND.md §13.5).
+  - 2026-11-24: **answered.** Sign-in with **Supabase Auth** (Apple, Google, email); email confirmation required for email and password; nature-illustration avatars, no profile photos; location asked later; 13+ confirmation; delete account in Settings; time-of-day welcome headlines. Planned in AUTH.md and FRONTEND.md §13.5, **not built** (your instruction).
+  - Still to confirm (AUTH.md §9): email with a password instead of the code, or both; Apple sign-in on Android or iPhone only; bundle id. Plus your choice of welcome headlines (FRONTEND.md §13.5).
 - [ ] Frontend · [ ] Backend · [ ] Migrations · [ ] Testing · [ ] Deployment
 
 ### Phase 2 — My Habits: create, edit, delete, schedules, time windows
@@ -152,6 +165,7 @@ Rules that apply to every feature:
 8. **Opt-in extras.** Special challenges, saved challenges and step goals are optional; ignoring them changes nothing.
 9. **Strict layers, efficiently connected.** Engines calculate, the database stores and counts, the API is the only path between them; work is batched and saved atomically.
 10. **Security first** (2026-11-24). Every phase follows ARCHITECTURE.md §3.6; no improvement is accepted if it weakens security, and every testing stage includes security tests.
+11. **The keyboard never covers what you type** (2026-11-24, non-negotiable). Every screen and sheet uses keyboard avoidance and scroll inset adjustments (FRONTEND.md §7.4). Any difficulty is reported to you immediately.
 
 ---
 
@@ -161,8 +175,8 @@ Items marked **(to confirm)** need your rules before they are built.
 
 ### Phase 1 — Accounts and onboarding
 
-- Sign up and log in (method to confirm).
-- Onboarding: name, avatar (optional), height and weight (optional; used by the step tracker), location permission (coarse by default).
+- Sign in with **Supabase Auth** (decided 2026-11-24, AUTH.md): Apple, Google and email. Email confirmation is required for email and password accounts. Several devices allowed; stay signed in until signing out. Delete account in Settings, everything removed immediately.
+- Onboarding: name (required), **nature-illustration avatar** (no profile photos), height and weight (optional; used by the step tracker; units follow the phone's region). "13 or older" confirmation and terms and privacy links at sign-in. Location permission is asked when first needed (Phase 11). Welcome headline changes with the time of day.
 - **Done when:** a new user can sign up, log out, log in on another device and see the same data.
 
 ### Phase 2 — My Habits
@@ -334,8 +348,10 @@ Every phase runs these stages in order; a stage starts only when the previous on
 - Update this checklist for all affected phases.
 - Update FRONTEND.md, ARCHITECTURE.md and DB.md so they match what was actually built.
 - Add or update the entry in IMPROVEMENTS_LOG.md: Part, Phase, what was in plan, what was done, required changes, comparison table. Log every instruction you give.
+- Test the stage with the tests that fit its stack and module (unit, integration on a real PostgreSQL, k6 load tests, `EXPLAIN`, end-to-end, frame rate, security), record every result in metrics_and_testing.md, compare it with the targets there, and add misses to its backlog (rule set 2026-11-24).
+- Write the stage report in `docs/reports/` (execution against plan, deviation analysis and remediation, adequacy of the planned approach, summary matrix). **Nothing is pushed to GitHub until you have reviewed the report and confirmed.**
 
-**Frontend exit check also requires:** 120 fps on a production build on a 120 Hz phone, measured with the Perf Monitor or Instruments (FRONTEND.md §7.3).
+**Frontend exit check also requires:** 120 fps on a production build on a 120 Hz phone, measured with the Perf Monitor or Instruments (FRONTEND.md §7.3); and, on every screen or sheet with a text field, the keyboard never covers the focused field or its submit button, on iOS and Android (FRONTEND.md §7.4).
 
 ---
 
@@ -356,10 +372,16 @@ Every phase runs these stages in order; a stage starts only when the previous on
 | Photo location exposure | Privacy harm | Location removed from image files; stored rounded to about 500 m |
 | Layer rules drift | Logic in SQL, engines touching the DB | Separate packages, CI lint rules, query review rule |
 | Missing 120 fps | Breaks the non-negotiable smoothness rule | Native press feedback, UI-thread animation only, iOS 120 Hz key, Android refresh-rate request, production-build frame check at every frontend stage |
+| Keyboard covers a field or button | Breaks the non-negotiable keyboard rule; forms unusable | `react-native-keyboard-controller` everywhere, lint rule against React Native's own scroll and avoiding views, keyboard check on both platforms at every frontend stage; difficulties reported immediately |
 | Judging speed in development mode | Wrong conclusions about smoothness | Use `npm run mobile:perf` or a production build; never Expo Go development mode |
 
 ---
 
 ## 10. Next step
 
-Answer the open questions in FRONTEND.md §13, ARCHITECTURE.md §11 and DB.md §11. When you give the command, Phase 0 starts.
+1. **Phase 0 deployment stage** (needs you):
+   - an Expo account for EAS development builds, for the 120 fps check and Google sign-in testing
+   - your phone model
+   - the choice of host, after a price comparison
+2. **Phase 1** starts on your command, after the open points in AUTH.md §9 and your welcome headline choice. Your Supabase setup steps (AUTH.md §3) can run in parallel.
+3. Open questions remain in FRONTEND.md §13, ARCHITECTURE.md §11 and DB.md §11, for later phases.
