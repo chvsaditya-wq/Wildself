@@ -1,0 +1,10 @@
+# Keep line endings identical on every machine and in CI.
+* text=auto eol=lf
+
+# Binary files: never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ttf binary
+*.otf binary

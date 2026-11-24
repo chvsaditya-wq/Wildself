@@ -1,0 +1,25 @@
+{
+  "name": "wildself",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wildself: a nature habit tracker. Monorepo for the mobile app, API, worker, engines and data layer.",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*",
+    "engines/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "overrides": {
+    "react": "19.3.0"
+  },
+  "scripts": {
+    "mobile": "npm run start --workspace apps/mobile",
+    "mobile:perf": "npm run start:perf --workspace apps/mobile",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  }
+}
