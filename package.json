@@ -15,11 +15,24 @@
   "overrides": {
     "react": "19.3.0"
   },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.1"
+  },
   "scripts": {
     "mobile": "npm run start --workspace apps/mobile",
     "mobile:perf": "npm run start:perf --workspace apps/mobile",
+    "api:dev": "npm run dev:api --workspace services/backend",
+    "worker:dev": "npm run dev:worker --workspace services/backend",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present && npm run test:db-tools",
+    "test:db-tools": "vitest run --root db/tools",
+    "db:check": "node db/tools/check-migrations.mjs db/migrations",
+    "db:migrate": "node db/tools/migrate.mjs up",
+    "db:new": "node-pg-migrate create --migrations-dir db/migrations --migration-file-language sql"
   }
 }

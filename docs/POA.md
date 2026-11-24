@@ -4,15 +4,15 @@ _As of 2026-11-24 · "Wildself" is a working name_
 
 We will build a React Native (Expo) habit tracker that gets people outdoors. The work runs in **18 phases (Phase 0–17)**, one feature at a time. Each phase goes **Frontend → Backend → Database migrations → Rigorous testing → Update and deployment**.
 
-> **Status (2026-11-24): Phase 0 in progress.** Frontend stage built and reviewed: the design is approved; 120 fps (non-negotiable) is not yet reached. Smoothness changes are made and waiting for your re-test and a production-build check. Backend, migrations, testing and deployment stages of Phase 0 not started. Phases 1–17 not started. Before any feature's behaviour is written, we go through its open questions together and you set the rules.
+> **Status (2026-11-24): Phase 0 in progress.** Frontend: design approved; after the smoothness changes you found it much smoother in production mode; 120 fps still to be confirmed on a production build. Backend and database stages built and tested (100 tests pass, including 6 on your local PostgreSQL); the API, worker and migration tool were run against your local database, and the first migration ran on `wildself_dev`. Testing and deployment stages not started. Phases 1–17 not started. Code is on GitHub: `chvsaditya-wq/Wildself`.
 
 This file is the overall plan and progress tracker. The detailed docs:
 
 | Doc | Covers | Status |
 | --- | --- | --- |
 | [FRONTEND.md](FRONTEND.md) | Design system, motion, performance rules (120 fps), navigation, screens | Phase 0 foundations built; some choices to confirm |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Backend: layers, 6 engines, ticket system, efficiency rules, midnight pipeline, offline data, API | Draft, awaiting your answers |
-| [DB.md](DB.md) | Tables, who supplies each value, data-layer operations, migrations, data growth and retention | Draft, awaiting your answers |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Backend: layers, 6 engines, ticket system, efficiency rules, midnight pipeline, offline data, security rules, approved stack, API | Stack approved; Phase 0 backend built |
+| [DB.md](DB.md) | Tables, who supplies each value, data-layer operations, migrations, data growth and retention | Phase 0 tooling built; feature tables start in Phase 1 |
 | [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) | Per phase and part: plan, what was built, required changes, comparison table; log of every instruction | Started 2026-11-24 |
 
 If this file disagrees with a detailed doc, the detailed doc wins.
@@ -29,11 +29,19 @@ Tick a stage only when its exit check (Section 8) passes. A phase is done when a
 - [ ] Frontend: Expo repo, design tokens, base components, tab shell (Home, Discover, Analytics, Settings), slide-out menu shell, offline action queue
   - 2026-11-23: built in `apps/mobile` (Expo SDK 58). Typecheck, lint, expo-doctor (20/20) and 45 unit tests pass; Android and iOS bundles build.
   - 2026-11-24: reviewed on your phone. **Design approved.** **120 fps not reached** → press feedback moved to native code, indicators start on the tap, iOS 120 Hz key added, production-mode test script added (IMPROVEMENTS_LOG.md, Frontend Phase 0). All checks still pass.
-  - Still to tick this box: your re-test with `npm run mobile:perf`, then 120 fps confirmed on a production build on a 120 Hz phone (needs the development build below).
+  - 2026-11-24: you re-tested with `npm run mobile:perf`: **much smoother**.
   - [x] Design and layout approved (2026-11-24)
-  - [ ] 120 fps confirmed on a production build
+  - [x] Smoothness re-test in production mode (2026-11-24)
+  - [ ] 120 fps confirmed on a production build on a 120 Hz phone (needs the development build below)
 - [ ] Backend: one build with `api` and `worker` roles, internal API interface, scheduler skeleton, auth wiring
+  - 2026-11-24: built in `services/backend` with `packages/contracts`, `packages/internal-api`. Fastify 5 API with health checks, `/v1/session`, request ids, security headers, rate and size limits, safe error format; worker with minute scheduler, single-leader lock and heartbeat; fail-fast config; Sentry with all personal-data collection off; auth interface with `deny-all` default and a development-only stub. 37 backend tests pass; production build (21 KB) starts and answers.
+  - 2026-11-24: run against your local PostgreSQL: `/health/ready` reports the database ok; login is required on `/v1/session` and on unknown routes; of two workers started together, only one became leader and its heartbeat ran on the minute.
+  - Still to tick: the layer-boundary lint (Testing stage).
 - [ ] Database: PostgreSQL environments (local / staging / prod), migration tool, data-layer skeleton, monthly partition creation
+  - 2026-11-24: `packages/data` (pool with UTC and timeouts, ping, advisory leader lock), forward-only SQL migrations with node-pg-migrate, CI check that rejects logic in migrations (12 tests), local setup guide, 6 integration tests ready.
+  - 2026-11-24: you set up local PostgreSQL. All 6 integration tests pass (4 runs in a row); 3 had failed at first because of mistakes in the tests, now fixed (IMPROVEMENTS_LOG.md, DB Phase 0). `db:migrate` ran (safety check, connection, nothing to apply yet).
+  - 2026-11-24: you fixed the `DATABASE_URL` password in `.env`; `npm run db:migrate` ran on `wildself_dev`. **Local environment done.**
+  - Still to tick: staging and production databases come with the deployment stage. Monthly partition creation moves to Phase 3, where the first partitioned table appears.
 - [ ] Testing: CI pipeline, lint rules that enforce the layer boundaries
 - [ ] Deployment: EAS dev builds (with the Android highest-refresh-rate setting and the iOS 120 Hz key), staging API and worker deployed, Sentry
 
@@ -143,6 +151,7 @@ Rules that apply to every feature:
 7. **Fetch once, keep forever; keep only what is used.** A species is looked up once. Detail that stops being useful is deleted on a schedule.
 8. **Opt-in extras.** Special challenges, saved challenges and step goals are optional; ignoring them changes nothing.
 9. **Strict layers, efficiently connected.** Engines calculate, the database stores and counts, the API is the only path between them; work is batched and saved atomically.
+10. **Security first** (2026-11-24). Every phase follows ARCHITECTURE.md §3.6; no improvement is accepted if it weakens security, and every testing stage includes security tests.
 
 ---
 
@@ -169,6 +178,7 @@ Items marked **(to confirm)** need your rules before they are built.
 - **Home** (from your sketch): hamburger menu, greeting, profile icon, daily challenge card, **Steps** and **Water** tiles (words only until Phases 4 and 5), habits scroll box.
 - Only habits scheduled for today appear. Tapping the tick mark **or** the name completes a habit: struck through and very light. Tapping again undoes it, until 23:59.
 - **Offline ticks count:** stored with the time of the tap on the phone and sent when the signal returns. If they arrive after midnight (up to 7 days), the closed day is amended, mana is replayed, and the user is told calmly.
+- **Batched sync:** all waiting actions go in one request (`POST /sync`), under the security rules in ARCHITECTURE.md §3.5 (identity from the token only, ownership checks, size and rate limits, per-action results, replay-safe).
 - **Streaks:** at least 2 days. A day not logged is missed.
 - **Habit tracker engine:** today's habits, day close at 00:00 in the phone's current time zone, daily / weekly / monthly counts.
 - **Midnight pipeline:** closes days in batches of users, each saved in one transaction. Dormant users (14 days) are paused and caught up as missed days when they return.

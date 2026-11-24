@@ -1,12 +1,19 @@
 # Wildself — Backend Architecture
 
-_As of 2026-11-24 · Draft for review · Backend not started (Phase 0 frontend built)_
+_As of 2026-11-24 · Stack approved · Phase 0 backend built in `services/backend`_
 
 **Related docs:** [POA.md](POA.md) (plan and progress) · [FRONTEND.md](FRONTEND.md) (app) · [DB.md](DB.md) (database) · [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) (changes and instructions)
 
 The system has **4 strictly separated layers** and **6 engines**: Habit tracker, Step tracker, Water tracker, Mana, Analytics and Image search. The database layer only stores and retrieves. Engines only calculate. The internal API is the only path between engines and the database. Four efficiency rules (§6) keep this fast: atomic grouped writes, batches of users, counting in the database without deciding there, and in-process calls.
 
-> **Status (2026-11-24):** this document records your rules and proposes structure around them. Only Layer 1 exists so far: the mobile app shell in `apps/mobile`, including the offline action queue (§3.4) on the phone side. The API, worker, engines and data layer are built in Phase 0's backend stage, which needs your answers in §11.7 (stack, login, hosting) first.
+> **Status (2026-11-24):** stack approved (§8.1). Built so far:
+>
+> - **Layer 1:** the mobile app shell in `apps/mobile`, with the offline action queue (§3.4).
+> - **Layer 3:** `services/backend` in two roles. The API has health checks, `/v1/session`, and the security rules of §3.6: request ids, security headers, rate and size limits, a safe error format, every route protected by default. The worker has a minute scheduler, a single-leader lock and a heartbeat. Plus the internal API (`packages/internal-api`) and shared contracts (`packages/contracts`).
+> - **Layer 4:** `packages/data`, with the connection pool, health ping and leader lock.
+> - **Engines:** none yet. The first one arrives in Phase 3.
+>
+> Auth is an interface (`deny-all` by default, a local-only test login for development) until the provider is chosen before Phase 1. §11 lists what is still open.
 
 ---
 
@@ -137,6 +144,34 @@ sequenceDiagram
     ME->>API: readManaInputs(user, Mon to today)
     ME->>API: applyManaResults · one transaction (corrections, state)
 ```
+
+### 3.5 Batched sync (Phase 3) and its security rules
+
+When the signal returns, the phone sends **all waiting actions in one request** (`POST /sync`) instead of one request per action. You approved this on 2026-11-24 on the condition that it causes no security issues, so it follows these rules:
+
+| Risk | Rule |
+| --- | --- |
+| Acting as someone else | The user is taken **only** from the verified login token, never from the request body. Every action is checked to belong to that user (e.g. the habit must be theirs) |
+| Oversized or flooding requests | At most 100 actions and 256 KB per request; per-user rate limit; larger queues are sent in several requests |
+| Malformed or unexpected data | Every action is validated against a strict schema for its type; unknown types or extra fields are rejected |
+| Replayed requests | Each action's `client_action_id` is unique per user in the database, so replaying a request stores nothing twice |
+| Back- or forward-dated actions | The corrected timestamp must fall inside the 7-day late-data window and not in the future; otherwise that action is rejected |
+| Partial failures hidden | The reply lists every action with its own result: `accepted`, `duplicate` or `rejected` with a reason code. Nothing is dropped silently, and the phone keeps rejected actions visible |
+| One bad action blocking the rest | Each action is applied in its own transaction; a rejected action never blocks the others |
+
+### 3.6 Security first (rule set 2026-11-24)
+
+Security is a priority in every phase, not a final audit.
+
+- **Every request is authenticated** except the health checks; authorisation is checked per resource, so users can only ever touch their own data.
+- **Validate everything that comes in** with strict schemas; reject unknown fields.
+- **Parameterised SQL only**; no SQL built from strings.
+- **Secrets only in environment variables**, never in code or git; the server refuses to start if a required secret is missing or a development-only setting is on in production.
+- **Errors never leak internals**: users get an error code and a request id; details go to the logs and Sentry.
+- **Limits everywhere**: request size, rate limits per user and per IP, query timeouts.
+- **Security headers** on every response; HTTPS only in staging and production.
+- **Dependencies** checked by `npm audit` in CI; reviewed before adding.
+- **Every phase's testing stage includes security checks** for the endpoints it adds (access to another user's data, malformed input, limits).
 
 ---
 
@@ -425,22 +460,30 @@ Every internal read takes a batch of users; every internal write is one transact
 
 ## 8. Stack and repository layout
 
-### 8.1 Proposed stack
+### 8.1 Stack (approved 2026-11-24)
 
-| Concern | Proposal |
+Chosen for lowest running cost, speed, ease of building, no silent failures and few calls per feature.
+
+| Concern | Choice |
 | --- | --- |
 | Mobile app | Expo (React Native, TypeScript); see [FRONTEND.md](FRONTEND.md) |
 | Steps | react-native-health (iOS HealthKit), react-native-health-connect (Android) |
 | Reminders | expo-notifications, local scheduled notifications |
-| API and worker | Node.js + TypeScript, Fastify, Zod, OpenAPI; one build, two roles (§6.4) |
+| API and worker | Node.js 22 + TypeScript, **Fastify 5**, Zod validation; **one build, two roles** (`api`, `worker`) (§6.4) |
+| Hosting | **Always-on small container** (Docker) at a low-cost host such as Fly.io, Railway or Render; picked by comparing current prices before Phase 0's deployment stage. Not serverless: no cold starts, no extra scheduler, queue or pooler services |
 | Data layer | `packages/data`, SQL via `postgres.js` |
-| Database | PostgreSQL 16 (host to confirm) |
-| Migrations | `node-pg-migrate` or `dbmate`, plain SQL, forward-only |
+| Database | **Managed PostgreSQL** (e.g. Neon or Supabase-hosted Postgres) in staging and production; local PostgreSQL 17 in development |
+| Migrations | Plain SQL files, forward-only, CI check against logic objects |
 | Object storage | S3-compatible bucket for photos |
-| Auth | To confirm (§11.7) |
-| Testing | Vitest (engines, API), data-layer tests on real Postgres in Docker, Maestro end-to-end, load test of the midnight pipeline |
+| Auth | **Decided before Phase 1.** Phase 0 has an authentication interface and a development-only stub that refuses to start in production |
+| Testing | Vitest (engines, API, data layer on a real PostgreSQL), Maestro end-to-end, load test of the midnight pipeline |
 | CI/CD | GitHub Actions; EAS Build / Submit / Update |
-| Monitoring | Sentry; structured logs; pipeline timing per time zone |
+| Monitoring | Sentry (API and worker) with all personal-data collection switched off, Sentry Crons check-ins from the worker heartbeat, structured logs with request ids and redacted secrets, health endpoints (`/health`, `/health/ready`) with an uptime monitor, midnight completeness check |
+| Single active worker | PostgreSQL session advisory lock held on a dedicated connection and verified before every tick; freed automatically if the worker dies |
+| Build | esbuild bundles `services/backend` and our packages into one file (`dist/main.js`); third-party packages stay normal dependencies |
+| Repository | GitHub, private: `chvsaditya-wq/Wildself`, branch `main` |
+
+**Why not serverless** (decided 2026-11-24): a habit app is used every day and has a fixed midnight job, which is the case where an always-on server is cheapest and simplest. Serverless would add cold starts (felt as lag in the app), plus a scheduler, a queue and a connection pooler, each one more place to fail silently. The layered code does not depend on hosting, so it could move to serverless later if traffic patterns change.
 
 ### 8.2 Repository layout
 
@@ -460,8 +503,9 @@ nature-app-project/
 │   ├── contracts/            OpenAPI spec + shared types
 │   └── api-client/           typed client for the app
 ├── services/
-│   ├── api/                  role "api": public HTTPS endpoints
-│   └── worker/               role "worker": scheduler + midnight pipeline
+│   └── backend/              one build, two roles chosen at start-up:
+│       ├── src/api/          role "api": public HTTPS endpoints
+│       └── src/worker/       role "worker": scheduler + midnight pipeline
 ├── db/migrations/
 └── docs/
 ```
@@ -578,9 +622,9 @@ Before launch, the midnight pipeline is load-tested with 100,000 simulated users
 
 ### 11.7 Stack and hosting
 
-1. Accept the proposed stack (§8.1)?
-2. Auth: managed provider (e.g. Supabase Auth, Clerk) or our own?
-3. Hosting for the API, worker and PostgreSQL, and a budget?
+1. ~~Accept the proposed stack?~~ Answered 2026-11-24: approved, always-on Fastify, managed PostgreSQL (§8.1).
+2. **Auth:** managed provider (e.g. Supabase Auth, Clerk) or our own? Deferred: decided before Phase 1.
+3. **Hosting:** which host, and a budget? Decided before Phase 0's deployment stage, after comparing current prices.
 4. iOS and Android together from Phase 0?
 
 ### 11.8 Ticket system

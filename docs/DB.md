@@ -1,12 +1,19 @@
 # Wildself — Database Design
 
-_As of 2026-11-24 · Draft for review · No migrations written yet (Phase 0 database stage not started)_
+_As of 2026-11-24 · Phase 0 database tooling built · No feature tables yet (they start in Phase 1)_
 
 PostgreSQL holds the raw facts and the results the engines produce. It stores, retrieves, counts and sums, but never decides. Every read and write is a named function in the data layer, called only by the API. Engine work is read in batches of users and saved in one transaction per task. Detail is kept only while it is useful, then deleted.
 
 **Related docs:** [POA.md](POA.md) (plan and progress) · [ARCHITECTURE.md](ARCHITECTURE.md) (backend) · [FRONTEND.md](FRONTEND.md) (app) · [IMPROVEMENTS_LOG.md](IMPROVEMENTS_LOG.md) (changes and instructions)
 
-> **Status (2026-11-24):** design only. Table and column lists are drafts. The SQL migrations are written phase by phase, after each phase's questions are answered and you give the command. A local PostgreSQL 17 server is available on the development machine for Phase 0's database stage. On the phone, Phase 0 stores only the theme choice and the offline action queue, in a local key-value store (not in this database).
+> **Status (2026-11-24):** Phase 0 built the database tooling, not tables:
+>
+> - **`packages/data`:** connection pool (UTC, query timeouts on both ends, TLS required in production), health ping, and the worker leader lock.
+> - **Migrations:** forward-only SQL files in `db/migrations` (`npm run db:migrate`), and a check that rejects any logic in a migration (`npm run db:check`, 12 tests).
+> - **Local setup:** `db/local-setup.md`, which creates the `wildself_app` user (not a superuser) and the `wildself_dev` and `wildself_test` databases.
+> - **Integration tests:** 6 tests that run on a real PostgreSQL. They refuse to run against any database whose name lacks "test". All 6 pass on your local PostgreSQL 17 (2026-11-24).
+>
+> Table and column lists below are still drafts; each phase's migrations are written after its questions are answered. On the phone, Phase 0 stores only the theme choice and the offline action queue, in a local key-value store (not in this database).
 
 ---
 
@@ -255,9 +262,10 @@ Reads used by engines take a batch of users. Writes marked **(tx)** run all thei
 
 ## 9. Migrations
 
-- **Tool:** `node-pg-migrate` or `dbmate`, plain SQL files in `db/migrations`, forward-only.
+- **Tool (chosen 2026-11-24):** `node-pg-migrate` 9 with plain SQL files in `db/migrations` (`npm run db:new <name>` creates one). Run only through `npm run db:migrate`, which runs the no-logic check first, refuses `down` (forward-only), checks migration order and takes PostgreSQL's migration lock so two deploys never migrate at once. Its `pg` driver is used for migrations only; the app uses `postgres.js`.
+- **Coordination, not logic:** the worker's single-leader lock uses PostgreSQL's built-in `pg_try_advisory_lock`, a coordination primitive with no business rules (ARCHITECTURE.md §8.1).
 - **One migration per change**, named `YYYYMMDDHHMM_short_description.sql`, each with a rollback note.
-- **CI checks:** fails on `CREATE FUNCTION`, `CREATE PROCEDURE`, `CREATE TRIGGER`, `CREATE RULE` or `pg_cron`. Every migration is applied to a fresh database and to a copy of staging.
+- **CI checks** (`db/tools/check-migrations.mjs`, built 2026-11-24): fails on stored functions, procedures, triggers (including constraint and event triggers), rules, `DO` blocks, procedural languages, `pg_cron` and generated columns; comments are ignored. Every migration is applied to a fresh database and to a copy of staging.
 - **Partitioned tables** (`habit_completions`, `habit_day_items`, `water_entries`, `mana_transactions`, `engine_runs`) are split by month. Their unique keys include the partition column. The worker creates next month's partitions in advance.
 - **Changes to live tables** follow expand → migrate → contract.
 - **Seed data:** level thresholds, achievement catalogue, sample habits.

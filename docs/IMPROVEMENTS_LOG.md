@@ -18,7 +18,7 @@ Every build stage of every phase gets an entry here: what was planned, what was 
 
 ### Frontend — Phase 0: Foundations
 
-_Built 2026-11-23 · Reviewed on your phone 2026-11-24 · Changes made 2026-11-24 · Status: waiting for the 120 fps check on a production build_
+_Built 2026-11-23 · Reviewed on your phone 2026-11-24 · Changes made 2026-11-24 · Re-tested by you 2026-11-24: much smoother · Status: waiting for the 120 fps check on a production build_
 
 #### 1. What was in plan
 
@@ -75,10 +75,129 @@ From your review on 2026-11-24:
 | iOS frame rate | 120 fps on ProMotion | Capped at 60 fps by iOS (key missing) | `CADisableMinimumFrameDurationOnPhone` set | ✅ Set, active in our own builds |
 | Android frame rate | 60 fps on mid-range phones | Platform default | Request highest refresh rate | ⏳ Planned for the development build |
 | Frame-rate target | 60 fps Android / 120 fps iPhone (proposed) | Same | **120 fps on every 120 Hz phone, non-negotiable** | 🔁 Changed by you |
-| Performance testing | Flashlight, profiler | Development mode in Expo Go | `npm run mobile:perf`; final check on a production build | ⏳ Waiting for your re-test |
+| Performance testing | Flashlight, profiler | Development mode in Expo Go | `npm run mobile:perf`; final check on a production build | ✅ You re-tested: much smoother. ⏳ Production-build check pending |
 | On-device storage | MMKV | expo-sqlite key-value store | Unchanged | 🔁 Changed during build (runs in Expo Go) |
 | Fonts | DM Sans + Literata | 6 weights, 1.1 MB | Unchanged | ✅ |
 | Checks | Typecheck, lint, tests | All passing (45 tests) | All passing (45 tests), bundles build | ✅ |
+
+### Backend — Phase 0: Foundations
+
+_Built 2026-11-24 · Status: built and tested; waiting for the layer-boundary lint (testing stage) and a run against your local database_
+
+#### 1. What was in plan
+
+From POA.md Phase 0 and ARCHITECTURE.md:
+
+- One build with `api` and `worker` roles; internal API interface; scheduler skeleton; auth wiring.
+- Stack (approved 2026-11-24): Node.js 22 + TypeScript, Fastify, Zod, always-on container, managed PostgreSQL; auth decided before Phase 1.
+- Rules: strict layers (§2), efficiency rules (§6), no silent failures, security first (§3.6).
+
+#### 2. What was done (original implementation, 2026-11-24)
+
+- **Layout:**
+  - `services/backend`: one package; `--role=api` or `--role=worker` picks the role at start-up.
+  - `packages/contracts`: error codes and response shapes.
+  - `packages/internal-api`: the typed interface the worker and engines call.
+- **Configuration:** every setting is validated at start-up, and the server refuses to start if:
+  - the database URL is missing or not PostgreSQL
+  - production uses the development login
+  - production uses an unencrypted database connection
+  - production has no error reporting
+
+  Error messages name the setting, never its value.
+- **API (Fastify 5):**
+  - `GET /health` and `GET /health/ready` are public; `GET /v1/session` proves the login chain.
+  - Every other route, including unknown ones, needs login, so routes can't be discovered.
+  - A request id on every response; an incoming id is reused only if it's a valid UUID, so it can't inject text into the logs.
+  - Security headers (helmet); 256 KB body limit; rate limit per user, or per IP when not logged in.
+  - Timeouts on requests and connections.
+  - One error format, `{ error: { code, message, requestId } }`; unexpected errors show no internal details.
+- **Login:** an `Authenticator` interface. `deny-all` is the default; `dev-stub` accepts `Bearer dev:<uuid>`, for local work only, and is refused in production twice: by config and in code.
+- **Worker:**
+  - A scheduler that fires on minute boundaries without drifting, never overlaps a job with itself, and reports every failure and overrun.
+  - Exactly one leader, via a PostgreSQL session lock checked before every tick. If the lock is lost, the worker steps down and retries.
+  - A heartbeat job every minute, with Sentry Crons check-ins.
+- **Observability:**
+  - Structured logs (pino) with tokens, cookies and secrets redacted.
+  - Sentry 11 with **all personal-data collection switched off**. Sentry 11 collects user info, cookies, headers, request bodies, query strings, database values and local variables by default.
+  - Fatal errors are logged and reported, then the process exits so the host restarts it.
+- **Build:** esbuild bundles our code into one 21 KB file; third-party packages stay normal dependencies.
+- **Checks:**
+  - Typecheck passes; 35 backend tests and 2 internal API tests pass. They cover security, config, auth and the scheduler.
+  - The built server was started and called: `/health` 200 with security headers; `/health/ready` 503 with the real cause logged and hidden from the caller; `/v1/session` 401.
+  - Dependency audit: no backend runtime package affected. Two moderate issues exist only in Jest and Expo tooling; not force-fixed, because the fix breaks Expo.
+
+#### 3. Required changes
+
+None from you yet. Known follow-ups:
+
+1. Graceful shutdown on a stop signal could not be exercised on Windows; it is verified on Linux in the deployment stage.
+2. Layer-boundary lint (engines cannot import the data layer) is part of the testing stage.
+
+#### 4. Comparison table
+
+| Aspect | In plan | Original implementation (2026-11-24) | After changes | Status |
+| --- | --- | --- | --- | --- |
+| Roles | `services/api` and `services/worker` folders | One package `services/backend`, role chosen at start-up | — | 🔁 Simplified during build (same "one build, two roles" rule) |
+| Framework | Fastify | Fastify 5.12 | — | ✅ |
+| Hosting | Always-on container | Dockerless so far; build is one file ready for a container | — | ⏳ Container and host at deployment |
+| Auth | Interface until Phase 1 | `deny-all` default, `dev-stub` local only | — | ✅ |
+| Error reporting | Sentry | Sentry 11, personal data off, Crons heartbeat | — | ✅ (privacy defaults found and fixed during build) |
+| Single worker | One active copy | PostgreSQL advisory lock, verified each tick | — | ✅ (DB test pending) |
+| Request validation library | Zod type provider | Zod for config only; route validation added with the first request bodies | — | 🔁 Fewer dependencies in Phase 0 |
+| Security rules §3.6 | All | Headers, limits, auth by default, safe errors, redaction, fail-fast config | — | ✅ |
+| Tests | Unit tests | 37 passing | — | ✅ |
+
+### DB — Phase 0: Foundations
+
+_Built 2026-11-24 · Status: local environment done (integration tests pass, first migration ran on `wildself_dev`); staging and production at deployment_
+
+#### 1. What was in plan
+
+From POA.md Phase 0 and DB.md: PostgreSQL environments (local, staging, production), migration tool, data-layer skeleton, monthly partition creation, CI check against logic in the database.
+
+#### 2. What was done (original implementation, 2026-11-24)
+
+- **`packages/data`:** connection pool on postgres.js 4, with:
+  - UTC on every connection
+  - a server-side statement timeout plus a client-side query timeout
+  - TLS required in production
+  - a health ping
+  - the worker leader lock (`pg_try_advisory_lock` on a dedicated connection, freed automatically if the process dies)
+- **Migrations:**
+  - `node-pg-migrate` 9 with plain SQL files in `db/migrations`, run through `npm run db:migrate`.
+  - The wrapper runs the no-logic check first, refuses `down`, checks order and uses the migration lock.
+  - No migration files yet: Phase 0 needs no tables.
+- **No-logic check** (`npm run db:check`): rejects functions, procedures, triggers, rules, `DO` blocks, procedural languages, `pg_cron` and generated columns, and ignores comments. 12 tests pass.
+- **Local setup guide:** `db/local-setup.md` creates a non-superuser `wildself_app` and the `wildself_dev` and `wildself_test` databases. The password only ever goes into the git-ignored `.env`.
+- **Integration tests (6):**
+  - connection, UTC, query timeout
+  - only one holder of the lock at a time; lock freed on disconnect; a released lock can't be verified again
+  - refuse to run on a database without "test" in its name; skip with a printed warning if no test database is set
+
+#### 3. Required changes
+
+1. Your local PostgreSQL service was stopped. Starting it and creating the user and databases needs you (administrator rights and your `postgres` password); see `db/local-setup.md`. **Done by you, 2026-11-24.**
+2. **First run on your database (2026-11-24): 3 of 6 integration tests failed, all because of mistakes in the tests, not the data layer.** Fixed in `packages/data/test/database.integration.test.ts`:
+   - **UTC test:** `show timezone` returns a column named `TimeZone`, but the test read `tz`. It now reads `current_setting('TimeZone') as tz`. The connection was on UTC all along.
+   - **Lock freed on crash:** the test faked a crash with a polite close, which waits up to 5 s for the locked connection and ran past the test's time limit. It now has the server kill the connection (`pg_terminate_backend`), which is what a real crash looks like. It also checks something new: the old holder's `verify()` fails, so a worker that loses its lock stops running jobs.
+   - **Released lock:** failed only because the timed-out test still held the lock. Passes unchanged.
+   - Checked at the same time: the real worker releases its lock before closing at shutdown, so the polite-close delay never affects it.
+3. **`.env` finding:** `DATABASE_URL` and `TEST_DATABASE_URL` each appear twice. The template lines (8 and 10, `CHANGE_ME`) are ignored because the last copy wins. The `DATABASE_URL` on line 21 has a different password from the working one on line 22, so the first migration on `wildself_dev` is refused until you fix it. The migration tool, API and worker were checked against `wildself_test` instead. **Fixed by you the same day; the first migration then ran on `wildself_dev`.** The two ignored template lines are still in the file (harmless).
+4. Monthly partition creation moves to Phase 3, where the first partitioned table appears.
+5. Staging and production databases are created in the deployment stage.
+
+#### 4. Comparison table
+
+| Aspect | In plan | Original implementation (2026-11-24) | After changes | Status |
+| --- | --- | --- | --- | --- |
+| Environments | Local, staging, production | Local guide ready; staging and production at deployment | Local set up by you and working; staging and production at deployment | ✅ Local · ⏳ Staging, production |
+| Migration tool | node-pg-migrate or dbmate | node-pg-migrate 9, SQL files, forward-only wrapper | — | ✅ |
+| No-logic CI check | Functions, procedures, triggers, rules, pg_cron | Also `DO` blocks, procedural languages, generated columns | — | ✅ Stricter than planned |
+| Data layer | Skeleton | Pool with timeouts and UTC, ping, leader lock | — | ✅ |
+| Partition creation | Phase 0 | Moved to Phase 3 (first partitioned table) | — | 🔁 Moved |
+| Integration tests | On a real PostgreSQL | 6 written, skip loudly without a test database | 3 test mistakes fixed; crash test now kills the connection and checks the holder notices; 6/6 pass, 4 runs in a row | ✅ |
+| First migration run | — | Not run (no database) | Tool verified on `wildself_test`, then ran on `wildself_dev` after your `.env` fix | ✅ |
 
 ---
 
@@ -88,6 +207,14 @@ Everything you have asked for, newest first, with where it was applied.
 
 | Date | Instruction | Applied in |
 | --- | --- | --- |
+| 2026-11-24 | `.env` password fixed | First migration ran on `wildself_dev`; POA.md, DB Phase 0 entry |
+| 2026-11-24 | Local database setup done; check it | Integration tests run and fixed; API, worker and migration verified; `.env` finding reported (DB Phase 0 entry; POA.md) |
+| 2026-11-24 | Start building Phase 0 backend and database | `services/backend`, `packages/*`, `db/`; entries above |
+| 2026-11-24 | Push all existing code to `github.com/chvsaditya-wq/Wildself` before developing | First commit `3a549c5` pushed to `main` |
+| 2026-11-24 | Approve the stack; batched sync must not cause security issues; keep security a priority throughout | ARCHITECTURE.md §3.5, §3.6, §8.1; POA.md principle 10; memory |
+| 2026-11-24 | Choose the stack with the lowest running cost and best efficiency: fast, cheap, easy, no silent failures, few API calls; take no action until decided | ARCHITECTURE.md §8.1 (always-on Fastify, managed PostgreSQL, not serverless) |
+| 2026-11-24 | Login: decide later. Repository: create now on GitHub (private) | ARCHITECTURE.md §8.1, §11.7 |
+| 2026-11-24 | Re-tested with `mobile:perf`: much smoother | Frontend Phase 0 entry; POA.md; FRONTEND.md status |
 | 2026-11-24 | 120 fps is non-negotiable; make the app super smooth | Code (press feedback, indicators, iOS setting, perf script); FRONTEND.md §1, §6.4, §7; this log |
 | 2026-11-24 | UI design meets expectations | FRONTEND.md status; this log |
 | 2026-11-24 | Create this improvements log in the Part / Phase / plan / done / changes / comparison format; log every instruction | This document; POA.md §8 |

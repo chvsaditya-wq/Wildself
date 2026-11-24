@@ -1,0 +1,31 @@
+{
+  "name": "@wildself/backend",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One build, two roles: the public API (ROLE=api) and the scheduler/midnight pipeline (ROLE=worker).",
+  "scripts": {
+    "dev:api": "tsx watch --env-file-if-exists=.env src/main.ts --role=api",
+    "dev:worker": "tsx watch --env-file-if-exists=.env src/main.ts --role=worker",
+    "build": "node build.mjs",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/rate-limit": "^11.3.0",
+    "@sentry/node": "^11.17.0",
+    "@wildself/contracts": "0.0.0",
+    "@wildself/data": "0.0.0",
+    "@wildself/internal-api": "0.0.0",
+    "fastify": "^5.12.8",
+    "pino": "^10.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "pino-pretty": "^13.2.0",
+    "tsx": "^4.23.15"
+  }
+}
