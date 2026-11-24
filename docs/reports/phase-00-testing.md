@@ -5,7 +5,7 @@
 | **Phase · stage** | 0 Foundations · Rigorous testing |
 | **Run** | 2026-11-24 |
 | **Report date** | 2026-11-24 |
-| **Stage status** | Done locally: all suites, layer lint and k6 pass, and one security gap was found and fixed. CI pipeline built; its first run on GitHub happens with this push |
+| **Stage status** | **Done.** All suites, layer lint and k6 pass, and one security gap was found and fixed. First CI run on GitHub green (GitHub Actions run 45373311697 on commit `16548c8`) |
 | **Related** | [POA.md](../POA.md) Phase 0 · [metrics_and_testing.md](../metrics_and_testing.md) §2, §3.5, §5, §6, §9, §10 · [ARCHITECTURE.md](../ARCHITECTURE.md) §3.6 · [IMPROVEMENTS_LOG.md](../IMPROVEMENTS_LOG.md) Testing Phase 0 |
 
 ---
@@ -107,12 +107,12 @@
 
 | Item | Planned | Outcome | Deviation | Resolution | Status |
 | --- | --- | --- | --- | --- | --- |
-| CI pipeline | Yes | GitHub Actions with PostgreSQL, k6, audit, secret scan; actions pinned to SHAs | Extended | — | ✅ Built · ⏳ first run with this push |
+| CI pipeline | Yes | GitHub Actions with PostgreSQL, k6, audit, secret scan; actions pinned to SHAs | Extended | — | ✅ First run green |
 | Layer-boundary lint | Yes | dependency-cruiser, 8 rules | 2 rule bugs | Fixed and proven | ✅ |
 | Rate limit before login | Implied by §3.6 | Callers without a login unlimited | **Security gap** | Identify → limit → refuse | ✅ Fixed, tested |
 | k6 smoke | Yes | All checks pass; p95 ≤ 2.4 ms | None | — | ✅ |
 | k6 rate-limit check | Yes | Exact for signed-in users | Test counting | Test allows earlier health checks | ✅ |
 | k6 breakpoint and steady rates | Yes | Clean to 1,000 per second; refused connections above | Laptop limit | Re-measure on staging | ✅ Baseline · ⏳ staging |
 | Dependency audit | Yes | 0 high or critical | None | — | ✅ |
-| Secret scan | Yes | Blocked locally | Environment | Runs in CI | ⏳ First CI run |
+| Secret scan | Yes | Blocked locally | Environment | Runs in CI | ✅ No leaks found in CI |
 | Tests | All green | 106 pass | None | — | ✅ |

@@ -215,7 +215,7 @@ From POA.md Phase 0 and DB.md: PostgreSQL environments (local, staging, producti
 
 ### Testing — Phase 0: Foundations
 
-_Run 2026-11-24 · Status: done locally; first CI run on GitHub with the push of 2026-11-24 · Report: `reports/phase-00-testing.md`_
+_Run 2026-11-24 · Status: **done**; first CI run green (GitHub Actions run 45373311697 on commit `16548c8`) · Report: `reports/phase-00-testing.md`_
 
 #### 1. What was in plan
 
@@ -253,11 +253,11 @@ Found by the testing itself (2026-11-24):
 
 | Aspect | In plan | Original implementation (2026-11-24) | After changes | Status |
 | --- | --- | --- | --- | --- |
-| CI | Pipeline on every push | GitHub Actions with PostgreSQL, k6, audit, secret scan | — | ✅ Built · ⏳ first run |
+| CI | Pipeline on every push | GitHub Actions with PostgreSQL, k6, audit, secret scan | — | ✅ First run green |
 | Layer lint | Lint rules for layer boundaries | dependency-cruiser, 8 rules | 2 rule bugs fixed; each rule proven | ✅ |
 | Rate limit (§3.6) | Per user and per IP | Per user only in practice (callers without a login skipped it) | Identify → limit → refuse | ✅ Fixed |
 | Load baseline | Smoke, breakpoint, rate-limit | All run | Rate-limit test counting fixed | ✅ |
-| Secret scan | gitleaks | Blocked locally | Runs in CI | ⏳ first CI run |
+| Secret scan | gitleaks | Blocked locally | Runs in CI | ✅ No leaks found |
 | Tests | All green | 106 pass | — | ✅ |
 
 ---

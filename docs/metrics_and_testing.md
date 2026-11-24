@@ -395,6 +395,7 @@ Every test run that matters, newest first. Failures stay in the log.
 
 | Date | Phase · stage | Test | Result | Notes |
 | --- | --- | --- | --- | --- |
+| 2026-11-24 | 0 · Testing | **First CI run on GitHub** (GitHub Actions run 45373311697 on commit `16548c8`) | ✅ Both jobs green | Data-layer tests ran on PostgreSQL 17 (none skipped); migrations applied; k6 smoke 240/240 checks and rate-limit 5/5; `npm audit`: 0 high or critical; gitleaks: no leaks found |
 | 2026-11-24 | 0 · Testing | Whole repo, as in CI: typecheck, lint, layer lint, db:check, all suites | ✅ 106 tests | Mobile 48, backend 38, internal API 2, migration check 12, data layer 6 |
 | 2026-11-24 | 0 · Testing | k6 steady rates on `/v1/session` | ✅ ≤ 1,000 per s clean · ⚠ ≥ 1,500 per s | See §5; refused connections, not errors |
 | 2026-11-24 | 0 · Testing | k6 breakpoint (ramp to 6,000 per s over 3 min) | ⚠ Stopped itself past 1% failures | ~474,000 requests; p95 153 ms when stopped; refused connections |
@@ -444,7 +445,7 @@ Open items from tests and reviews. Closed items stay, with the date.
 | 13 | **Callers without a login were never rate-limited** (login was checked before the limit) | 2026-11-24, Phase 0 testing | Identify → limit → refuse order; 3 new tests; k6 check | ✅ Fixed 2026-11-24 |
 | 14 | Refused connections above ~1,000 requests per second on one instance (laptop) | 2026-11-24, k6 | Re-measure on the Linux staging host; add a second copy before traffic nears the limit (§3.4) | ⏳ Phase 0 deployment |
 | 15 | `TRUST_PROXY` must be on behind the host's proxy, or all users share one IP's rate limit | 2026-11-24, k6 | Set in the deployment config, with a test that reads the real client IP | ⏳ Phase 0 deployment |
-| 16 | Local secret scan blocked by this computer's permission settings | 2026-11-24 | gitleaks runs in CI on the full history on every push | ✅ Covered by CI |
+| 16 | Local secret scan blocked by this computer's permission settings | 2026-11-24 | gitleaks runs in CI on the full history on every push | ✅ Covered by CI; first scan: no leaks found |
 | 17 | k6 rate-limit test first failed: public health checks share the per-IP allowance | 2026-11-24 | Behaviour is correct; the test now allows for up to 5 earlier calls from the same IP | ✅ Fixed in the test |
 | 7 | Response compression not enabled | 2026-11-24 | Turn on for JSON over 1 KB when the first larger responses appear | ⏳ Phase 1–3 |
 | 8 | Event-loop delay not measured | 2026-11-24 | Add a `perf_hooks` monitor that logs p99 | ⏳ Phase 1 |

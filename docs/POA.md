@@ -4,7 +4,7 @@ _As of 2026-11-24 · "Wildself" is a working name_
 
 We will build a React Native (Expo) habit tracker that gets people outdoors. The work runs in **18 phases (Phase 0–17)**, one feature at a time. Each phase goes **Frontend → Backend → Database migrations → Rigorous testing → Update and deployment**.
 
-> **Status (2026-11-24): Phase 0 in progress. Frontend, backend and testing stages done; database stage done locally; deployment stage not started.** Frontend: design approved, much smoother in production mode, keyboard avoidance confirmed by you on your phone; 120 fps still to be confirmed on a production build. Backend and database: built and run against your local PostgreSQL. Testing: CI on GitHub, layer-boundary lint, k6 load baseline (clean to about 1,000 requests per second on one instance), and one security gap found and fixed; 106 tests pass. **Phase 1:** questions answered and planned (sign-in with Supabase Auth, AUTH.md); not built. Code is on GitHub: `chvsaditya-wq/Wildself`.
+> **Status (2026-11-24): Phase 0 in progress. Frontend, backend and testing stages done (CI green on GitHub); database stage done locally; deployment stage not started.** Frontend: design approved, much smoother in production mode, keyboard avoidance confirmed by you on your phone; 120 fps still to be confirmed on a production build. Backend and database: built and run against your local PostgreSQL. Testing: CI on GitHub, layer-boundary lint, k6 load baseline (clean to about 1,000 requests per second on one instance), and one security gap found and fixed; 106 tests pass. **Phase 1:** questions answered and planned (sign-in with Supabase Auth, AUTH.md); not built. Code is on GitHub: `chvsaditya-wq/Wildself`.
 
 This file is the overall plan and progress tracker. The detailed docs:
 
@@ -47,12 +47,12 @@ Tick a stage only when its exit check (Section 8) passes. A phase is done when a
   - 2026-11-24: you set up local PostgreSQL. All 6 integration tests pass (4 runs in a row); 3 had failed at first because of mistakes in the tests, now fixed (IMPROVEMENTS_LOG.md, DB Phase 0). `db:migrate` ran (safety check, connection, nothing to apply yet).
   - 2026-11-24: you fixed the `DATABASE_URL` password in `.env`; `npm run db:migrate` ran on `wildself_dev`. **Local environment done.**
   - Still to tick: staging and production databases come with the deployment stage. Monthly partition creation moves to Phase 3, where the first partitioned table appears.
-- [ ] Testing: CI pipeline, lint rules that enforce the layer boundaries
+- [x] Testing: CI pipeline, lint rules that enforce the layer boundaries
   - 2026-11-24: CI on GitHub Actions: typecheck, lint, layer lint, migration check, all tests on PostgreSQL 17, migrations, production build, k6 smoke and rate-limit checks, `npm audit`, gitleaks secret scan; actions pinned to commit SHAs.
   - 2026-11-24: layer-boundary lint (dependency-cruiser, 8 rules, each proven with a deliberate violation).
   - 2026-11-24: k6 smoke, steady rates, breakpoint and rate-limit tests. Clean to about 1,000 requests per second on one instance (laptop); re-measured on staging.
   - 2026-11-24: one security gap found and fixed (rate limit before the login check). 106 tests pass. Report: `reports/phase-00-testing.md`.
-  - To tick: the first CI run on GitHub is green.
+  - 2026-11-24: **first CI run green** (GitHub Actions run 45373311697 on commit `16548c8`): both jobs passed, the data-layer tests ran on PostgreSQL (none skipped), the k6 checks passed, and gitleaks found no leaks in the full history.
 - [ ] Deployment: EAS dev builds (with the Android highest-refresh-rate setting and the iOS 120 Hz key), staging API and worker deployed, Sentry
 
 ### Phase 1 — Accounts and onboarding
