@@ -207,6 +207,7 @@ Everything you have asked for, newest first, with where it was applied.
 
 | Date | Instruction | Applied in |
 | --- | --- | --- |
+| 2026-11-24 | Commit and push the backend and database work to GitHub | Commit `2b8ea27` pushed to `main` (checked first: no `.env` or real password in the commit) |
 | 2026-11-24 | `.env` password fixed | First migration ran on `wildself_dev`; POA.md, DB Phase 0 entry |
 | 2026-11-24 | Local database setup done; check it | Integration tests run and fixed; API, worker and migration verified; `.env` finding reported (DB Phase 0 entry; POA.md) |
 | 2026-11-24 | Start building Phase 0 backend and database | `services/backend`, `packages/*`, `db/`; entries above |
