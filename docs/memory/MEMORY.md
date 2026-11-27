@@ -1,0 +1,10 @@
+- [Consult before building](consult-before-building.md) — no code until user commands; ask detailed questions before specifying any behaviour
+- [Strict layer separation](strict-layer-separation.md) — 4 layers, 6 engines; DB is CRUD-only, engines calculate, API is the only path
+- [Docs as local markdown](docs-as-local-markdown.md) — planning docs live in docs/*.md, not artifacts
+- [Update docs after each stage](update-docs-after-each-stage.md) — after every build stage: POA checklist, sync all docs, IMPROVEMENTS_LOG.md entry in the fixed format
+- [120 fps non-negotiable](smoothness-120fps.md) — native press feedback, UI-thread motion, judge only on production builds
+- [Keyboard avoidance non-negotiable](keyboard-avoidance-non-negotiable.md) — keyboard-controller on every screen/sheet; report any difficulty immediately
+- [Security first](security-first.md) — every feature must be secure; follow ARCHITECTURE.md §3.6; never request secrets in chat
+- [Metrics and testing guide](metrics-and-testing-guide.md) — use docs/metrics_and_testing.md to maintain and improve metrics; test every stage per stack (unit, k6, …) and log results
+- [Stage reports](phase-stage-reports.md) — after every dev/testing stage, write `docs/reports/phase-NN-<stage>.md` in the 4-section format; push only after user confirms
+- [Backend stack decision](backend-stack.md) — always-on Fastify 5 + managed Postgres, not serverless; Supabase Auth (sign-in only, docs/AUTH.md); repo on GitHub with CI
